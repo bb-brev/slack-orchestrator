@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Types Deep Dive — Brev Operator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwindcss.config = {
+      theme: {
+        extend: {
+          colors: { slate: { 850: '#172033', 950: '#0a0f1a' } },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body { background: #0a0f1a; }
+    .gradient-text { background: linear-gradient(135deg, #f97316, #ef4444, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(100, 116, 139, 0.2); backdrop-filter: blur(12px); transition: border-color 0.2s; }
+    .card:hover { border-color: rgba(249, 115, 22, 0.3); }
+    .glow { box-shadow: 0 0 60px rgba(249, 115, 22, 0.06); }
+    .nav-link.active { color: #f97316; border-left-color: #f97316; }
+    details summary::-webkit-details-marker { display: none; }
+    details[open] summary .chevron { transform: rotate(90deg); }
+    .tag { font-size: 0.65rem; padding: 2px 8px; border-radius: 9999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .tag-core { background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.3); }
+    .tag-v1 { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .tag-v2 { background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+    .tag-v3 { background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
+    .arch-diagram { background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(100, 116, 139, 0.2); font-family: 'JetBrains Mono', monospace; overflow-x: auto; }
+    table { border-collapse: separate; border-spacing: 0; }
+    th { background: rgba(30, 41, 59, 0.8); }
+    td, th { border-bottom: 1px solid rgba(100, 116, 139, 0.15); }
+    @media (max-width: 1024px) { .sidebar { display: none; } }
+    .agent-card { position: relative; overflow: hidden; }
+    .agent-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+    .agent-orchestrator::before { background: linear-gradient(90deg, #ef4444, #f97316); }
+    .agent-drafter::before { background: linear-gradient(90deg, #3b82f6, #6366f1); }
+    .agent-analyst::before { background: linear-gradient(90deg, #10b981, #14b8a6); }
+    .agent-coordinator::before { background: linear-gradient(90deg, #a855f7, #ec4899); }
+    .agent-executor::before { background: linear-gradient(90deg, #f59e0b, #f97316); }
+    .agent-integrator::before { background: linear-gradient(90deg, #06b6d4, #3b82f6); }
+    .agent-researcher::before { background: linear-gradient(90deg, #8b5cf6, #6366f1); }
+    .agent-onboarding::before { background: linear-gradient(90deg, #22c55e, #10b981); }
+    .agent-compliance::before { background: linear-gradient(90deg, #ef4444, #dc2626); }
+    .agent-coach::before { background: linear-gradient(90deg, #ec4899, #f43f5e); }
+  </style>
+</head>
+<body class="text-slate-300 font-sans antialiased">
+
+  <header class="fixed top-0 w-full z-50 border-b border-slate-800/50 bg-[#0a0f1a]/80 backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+        </div>
+        <span class="font-bold text-white text-lg">Agent Types Deep Dive</span>
+        <span class="tag tag-core ml-2">Brev Operator</span>
+      </div>
+      <a href="brev-operator.html" class="text-sm text-indigo-400 hover:text-indigo-300">← Back to Planning Doc</a>
+    </div>
+  </header>
+
+  <div class="flex">
+    <nav class="sidebar fixed left-0 top-16 bottom-0 w-56 border-r border-slate-800/50 bg-[#0a0f1a]/60 backdrop-blur-xl overflow-y-auto py-6 px-4 z-40">
+      <div class="space-y-1 text-sm">
+        <p class="px-3 py-1 text-xs text-slate-600 uppercase tracking-wider font-semibold">Overview</p>
+        <a href="#landscape" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Agent Landscape</a>
+        <a href="#hierarchy" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Hierarchy</a>
+        <p class="px-3 py-1 mt-3 text-xs text-slate-600 uppercase tracking-wider font-semibold">Core Agents (v1)</p>
+        <a href="#orchestrator" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">🧠 Orchestrator</a>
+        <a href="#drafter" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">📝 Drafter</a>
+        <a href="#coordinator" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">📣 Coordinator</a>
+        <a href="#executor" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">⚡ Executor</a>
+        <a href="#integrator" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">🔌 Integrator</a>
+        <p class="px-3 py-1 mt-3 text-xs text-slate-600 uppercase tracking-wider font-semibold">Advanced Agents (v2)</p>
+        <a href="#analyst" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">🔎 Analyst</a>
+        <a href="#researcher" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">🌐 Researcher</a>
+        <a href="#coach" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">🎯 OKR Coach</a>
+        <p class="px-3 py-1 mt-3 text-xs text-slate-600 uppercase tracking-wider font-semibold">Enterprise Agents (v3)</p>
+        <a href="#onboarding" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">🚀 Onboarding</a>
+        <a href="#compliance" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">🛡️ Compliance</a>
+        <a href="#custom" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">🔧 Custom Agents</a>
+        <p class="px-3 py-1 mt-3 text-xs text-slate-600 uppercase tracking-wider font-semibold">Design</p>
+        <a href="#patterns" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Design Patterns</a>
+        <a href="#models" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Model Selection</a>
+        <a href="#scenarios" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Company Scenarios</a>
+      </div>
+    </nav>
+
+    <main class="ml-0 lg:ml-56 flex-1 max-w-4xl mx-auto px-6 pt-28 pb-20">
+
+      <!-- Hero -->
+      <section class="mb-16">
+        <h1 class="text-4xl md:text-5xl font-black text-white leading-tight mb-4">
+          The Agent<br><span class="gradient-text">Workforce</span>
+        </h1>
+        <p class="text-lg text-slate-400 max-w-2xl mb-6">
+          Every company that uses Brev Operator gets an AI operations team — a coordinated set of specialized agents that work together to keep the business running. Here's every agent, what it does, how it works, and when a company needs it.
+        </p>
+      </section>
+
+      <!-- Agent Landscape -->
+      <section id="landscape" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">01</span>
+          Agent Landscape
+        </h2>
+        <div class="card rounded-xl p-6 glow">
+          <p class="text-sm text-slate-400 mb-4">Brev Operator isn't one agent — it's a coordinated team of specialized agents, each with distinct tools, permissions, and model configurations. This mirrors how real operations teams work: a COO doesn't do everything themselves — they delegate to specialists.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left text-slate-400">
+                  <th class="px-3 py-2">Agent</th>
+                  <th class="px-3 py-2">Role</th>
+                  <th class="px-3 py-2">Lifecycle</th>
+                  <th class="px-3 py-2">Model</th>
+                  <th class="px-3 py-2">Phase</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-3 py-2 text-white">🧠 Orchestrator</td><td class="px-3 py-2">Decides what needs to happen and delegates</td><td class="px-3 py-2">Always-on (per-org)</td><td class="px-3 py-2 font-mono text-orange-400">Opus/Sonnet</td><td class="px-3 py-2"><span class="tag tag-v1">v1</span></td></tr>
+                <tr><td class="px-3 py-2 text-white">📝 Drafter</td><td class="px-3 py-2">Writes check-ins, reports, agendas, digests</td><td class="px-3 py-2">Spawned per task</td><td class="px-3 py-2 font-mono text-blue-400">Sonnet</td><td class="px-3 py-2"><span class="tag tag-v1">v1</span></td></tr>
+                <tr><td class="px-3 py-2 text-white">📣 Coordinator</td><td class="px-3 py-2">Manages Slack interactions, follow-ups, approvals</td><td class="px-3 py-2">Event-driven</td><td class="px-3 py-2 font-mono text-green-400">Haiku/Sonnet</td><td class="px-3 py-2"><span class="tag tag-v1">v1</span></td></tr>
+                <tr><td class="px-3 py-2 text-white">⚡ Executor</td><td class="px-3 py-2">Takes approved actions on Brev data</td><td class="px-3 py-2">Short-lived</td><td class="px-3 py-2 font-mono text-green-400">Haiku</td><td class="px-3 py-2"><span class="tag tag-v1">v1</span></td></tr>
+                <tr><td class="px-3 py-2 text-white">🔌 Integrator</td><td class="px-3 py-2">Syncs data from external tools</td><td class="px-3 py-2">Scheduled + on-demand</td><td class="px-3 py-2 font-mono text-green-400">Haiku</td><td class="px-3 py-2"><span class="tag tag-v1">v1</span></td></tr>
+                <tr><td class="px-3 py-2 text-white">🔎 Analyst</td><td class="px-3 py-2">Deep-dives into data, finds trends and root causes</td><td class="px-3 py-2">Spawned per query</td><td class="px-3 py-2 font-mono text-orange-400">Sonnet/Opus</td><td class="px-3 py-2"><span class="tag tag-v2">v2</span></td></tr>
+                <tr><td class="px-3 py-2 text-white">🌐 Researcher</td><td class="px-3 py-2">External research, competitive intel, benchmarking</td><td class="px-3 py-2">Spawned per task</td><td class="px-3 py-2 font-mono text-blue-400">Sonnet</td><td class="px-3 py-2"><span class="tag tag-v2">v2</span></td></tr>
+                <tr><td class="px-3 py-2 text-white">🎯 OKR Coach</td><td class="px-3 py-2">Helps teams write better goals and key results</td><td class="px-3 py-2">On-demand</td><td class="px-3 py-2 font-mono text-orange-400">Opus</td><td class="px-3 py-2"><span class="tag tag-v2">v2</span></td></tr>
+                <tr><td class="px-3 py-2 text-white">🚀 Onboarding</td><td class="px-3 py-2">Guides new users and teams through Brev setup</td><td class="px-3 py-2">Per-user lifecycle</td><td class="px-3 py-2 font-mono text-blue-400">Sonnet</td><td class="px-3 py-2"><span class="tag tag-v3">v3</span></td></tr>
+                <tr><td class="px-3 py-2 text-white">🛡️ Compliance</td><td class="px-3 py-2">Audits goal health, process adherence, data quality</td><td class="px-3 py-2">Scheduled</td><td class="px-3 py-2 font-mono text-blue-400">Sonnet</td><td class="px-3 py-2"><span class="tag tag-v3">v3</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Hierarchy -->
+      <section id="hierarchy" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">02</span>
+          Agent Hierarchy & Communication
+        </h2>
+        <div class="arch-diagram rounded-xl p-6 text-xs leading-relaxed">
+<pre class="text-slate-400">
+                         ┌──────────────────────┐
+                         │  <span class="text-red-400">🧠 ORCHESTRATOR</span>      │
+                         │  <span class="text-slate-500">The Brain</span>             │
+                         │  <span class="text-slate-500">Decides + Delegates</span>   │
+                         └──────────┬───────────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              │                     │                     │
+              ▼                     ▼                     ▼
+   ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+   │ <span class="text-blue-400">📝 DRAFTER</span>        │  │ <span class="text-purple-400">📣 COORDINATOR</span>    │  │ <span class="text-cyan-400">🔌 INTEGRATOR</span>     │
+   │ <span class="text-slate-500">Writes artifacts</span>  │  │ <span class="text-slate-500">Manages humans</span>    │  │ <span class="text-slate-500">Syncs ext. data</span>   │
+   └────────┬─────────┘  └────────┬─────────┘  └──────────────────┘
+            │                     │
+            │                     ▼
+            │           ┌──────────────────┐
+            │           │ <span class="text-amber-400">⚡ EXECUTOR</span>       │
+            └──────────▶│ <span class="text-slate-500">Takes actions</span>     │  <span class="text-slate-600">← runs after human approval</span>
+                        └──────────────────┘
+
+   <span class="text-slate-600">v2 agents (spawned by Orchestrator on demand):</span>
+   ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+   │ <span class="text-emerald-400">🔎 ANALYST</span>        │  │ <span class="text-violet-400">🌐 RESEARCHER</span>     │  │ <span class="text-pink-400">🎯 OKR COACH</span>      │
+   │ <span class="text-slate-500">Deep data dives</span>   │  │ <span class="text-slate-500">External intel</span>    │  │ <span class="text-slate-500">Goal quality</span>      │
+   └──────────────────┘  └──────────────────┘  └──────────────────┘
+</pre>
+        </div>
+        <div class="card rounded-xl p-5 mt-4">
+          <h4 class="text-sm font-semibold text-white mb-3">Communication Rules</h4>
+          <ul class="space-y-2 text-xs text-slate-400">
+            <li><strong class="text-white">Orchestrator → Agents:</strong> Spawns agents with a task prompt + scoped context. Agent receives only the data it needs (principle of least privilege).</li>
+            <li><strong class="text-white">Agents → Orchestrator:</strong> Return structured results (success/failure/blocked + artifacts). If blocked, include a structured question.</li>
+            <li><strong class="text-white">Coordinator → Humans:</strong> All human-facing communication goes through the Coordinator. Other agents never post to Slack directly.</li>
+            <li><strong class="text-white">Executor → Brev API:</strong> All write operations go through the Executor. Other agents produce drafts/recommendations; the Executor applies them after approval.</li>
+            <li><strong class="text-white">No peer-to-peer:</strong> Agents don't talk to each other directly. The Orchestrator coordinates all inter-agent work, preventing loops and conflicts.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- CORE AGENTS -->
+
+      <!-- Orchestrator -->
+      <section id="orchestrator" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center text-red-400 text-sm font-mono">03</span>
+          🧠 Orchestrator Agent
+          <span class="tag tag-v1">Core · v1</span>
+        </h2>
+
+        <div class="card agent-card agent-orchestrator rounded-xl p-6 mb-4 glow">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Identity</h4>
+              <p class="text-sm text-white font-semibold">The AI COO's brain</p>
+              <p class="text-xs text-slate-400 mt-1">The only always-on agent. Runs the planning loop, evaluates org state, decides what needs to happen, and delegates to specialized agents.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Model & Cost</h4>
+              <p class="text-xs text-slate-400"><strong class="text-orange-400">Planning loop:</strong> Claude Opus (complex reasoning, multi-step prioritization)</p>
+              <p class="text-xs text-slate-400 mt-1"><strong class="text-blue-400">Reactive routing:</strong> Claude Sonnet (fast intent detection)</p>
+              <p class="text-xs text-slate-400 mt-1"><strong class="text-slate-300">Est. cost:</strong> $50–150/org/mo depending on org size and loop frequency</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Lifecycle</h4>
+              <p class="text-xs text-slate-400">Always-on per org. Runs on a cron schedule (every 2–4 hours during business hours). Also invoked reactively on @mentions and events.</p>
+              <p class="text-xs text-slate-400 mt-1"><strong class="text-slate-300">Session:</strong> Persistent context window per org, compacted periodically.</p>
+            </div>
+          </div>
+
+          <h4 class="text-sm font-semibold text-white mb-3">What It Does — Decision Tree</h4>
+          <div class="arch-diagram rounded-lg p-4 text-xs mb-4">
+<pre class="text-slate-400">
+<span class="text-red-400">PLANNING LOOP</span> (cron: every 2-4h during business hours)
+│
+├─ <span class="text-white">Scan Goals</span>
+│  ├─ At Risk / Behind → Spawn <span class="text-blue-400">Drafter</span>(risk_report) + <span class="text-purple-400">Coordinator</span>(escalate)
+│  ├─ Check-in Overdue → Spawn <span class="text-blue-400">Drafter</span>(checkin_draft) + <span class="text-purple-400">Coordinator</span>(deliver_dm)
+│  └─ On Track, No Update in 2wk → Spawn <span class="text-purple-400">Coordinator</span>(gentle_nudge)
+│
+├─ <span class="text-white">Scan Action Items</span>
+│  ├─ Past Due → Spawn <span class="text-purple-400">Coordinator</span>(follow_up) with meeting transcript context
+│  ├─ Due Today → Spawn <span class="text-purple-400">Coordinator</span>(reminder) with low urgency
+│  └─ Completed but Unverified → Spawn <span class="text-cyan-400">Integrator</span>(verify_from_source)
+│
+├─ <span class="text-white">Scan Cadences</span>
+│  ├─ Meeting in &lt;1h → Spawn <span class="text-blue-400">Drafter</span>(agenda)
+│  ├─ Meeting ended &lt;2h ago → Spawn <span class="text-blue-400">Drafter</span>(action_items_from_transcript)
+│  └─ QBR this week → Spawn <span class="text-blue-400">Drafter</span>(quarterly_report)
+│
+├─ <span class="text-white">Scan Integrations</span>
+│  ├─ KPI threshold crossed → Spawn <span class="text-purple-400">Coordinator</span>(alert) + <span class="text-blue-400">Drafter</span>(context)
+│  └─ New data available → Spawn <span class="text-cyan-400">Integrator</span>(sync) + <span class="text-amber-400">Executor</span>(update_kpi)
+│
+└─ <span class="text-white">Prioritize & Throttle</span>
+   ├─ Max 5 outbound messages per user per day (prevent spam)
+   ├─ Priority: critical blockers > overdue check-ins > scheduled reports > nudges
+   └─ Respect quiet hours (configurable per org)
+</pre>
+          </div>
+
+          <h4 class="text-sm font-semibold text-white mb-3">Tools Available</h4>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div class="bg-slate-800/30 rounded p-2"><span class="text-orange-400 font-mono">goals.list</span><br><span class="text-slate-500">Read all goals + status</span></div>
+            <div class="bg-slate-800/30 rounded p-2"><span class="text-orange-400 font-mono">kpis.list</span><br><span class="text-slate-500">Read all KPI values</span></div>
+            <div class="bg-slate-800/30 rounded p-2"><span class="text-orange-400 font-mono">checkins.list</span><br><span class="text-slate-500">Find overdue check-ins</span></div>
+            <div class="bg-slate-800/30 rounded p-2"><span class="text-orange-400 font-mono">cadences.list</span><br><span class="text-slate-500">Get meeting schedule</span></div>
+            <div class="bg-slate-800/30 rounded p-2"><span class="text-orange-400 font-mono">actions.list</span><br><span class="text-slate-500">Open action items</span></div>
+            <div class="bg-slate-800/30 rounded p-2"><span class="text-orange-400 font-mono">users.list</span><br><span class="text-slate-500">Org users + workload</span></div>
+            <div class="bg-slate-800/30 rounded p-2"><span class="text-orange-400 font-mono">agent.spawn</span><br><span class="text-slate-500">Spawn sub-agents</span></div>
+            <div class="bg-slate-800/30 rounded p-2"><span class="text-orange-400 font-mono">tasks.manage</span><br><span class="text-slate-500">Track task state</span></div>
+          </div>
+
+          <div class="mt-4 pt-4 border-t border-slate-700/50">
+            <h4 class="text-sm font-semibold text-white mb-2">Example: A Single Planning Cycle</h4>
+            <p class="text-xs text-slate-400">Tuesday 10:00 AM, 50-person SaaS company. The Orchestrator runs its planning loop:</p>
+            <ol class="text-xs text-slate-400 space-y-2 mt-2 list-decimal pl-4">
+              <li><strong class="text-slate-300">Scans 12 company goals:</strong> 2 At Risk (NPS down, pipeline behind), 1 Behind (hiring target), 9 On Track.</li>
+              <li><strong class="text-slate-300">Finds 8 overdue check-ins:</strong> 5 are 3+ days overdue (high priority), 3 are 1 day overdue (low priority).</li>
+              <li><strong class="text-slate-300">Detects upcoming QBR:</strong> Thursday at 2pm. No agenda prepared yet.</li>
+              <li><strong class="text-slate-300">Checks integration data:</strong> HubSpot shows pipeline dropped 12% this week. Linear shows sprint velocity down.</li>
+              <li><strong class="text-slate-300">Prioritizes actions:</strong> (1) Pipeline alert → VP Sales, (2) 5 overdue check-in drafts, (3) QBR agenda, (4) NPS trend analysis.</li>
+              <li><strong class="text-slate-300">Spawns agents:</strong> 1 Drafter for QBR agenda, 5 Drafters for check-ins, 1 Coordinator for pipeline alert, 1 Analyst for NPS deep-dive.</li>
+              <li><strong class="text-slate-300">Throttles output:</strong> VP Sales gets the pipeline alert now. Check-in drafts staggered over 2 hours to avoid flooding. QBR agenda scheduled for Wednesday morning.</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <!-- Drafter -->
+      <section id="drafter" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 text-sm font-mono">04</span>
+          📝 Drafter Agent
+          <span class="tag tag-v1">Core · v1</span>
+        </h2>
+
+        <div class="card agent-card agent-drafter rounded-xl p-6 mb-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Identity</h4>
+              <p class="text-sm text-white font-semibold">The writer</p>
+              <p class="text-xs text-slate-400 mt-1">Produces all written artifacts: check-in drafts, weekly reports, meeting agendas, risk analyses, executive summaries. Pulls data from Brev APIs and integrations, synthesizes into human-ready output.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Model & Cost</h4>
+              <p class="text-xs text-slate-400"><strong class="text-blue-400">Default:</strong> Claude Sonnet (good writing quality, fast, cost-effective)</p>
+              <p class="text-xs text-slate-400 mt-1"><strong class="text-orange-400">Exec reports:</strong> Opus for quarterly reviews and board-level summaries</p>
+              <p class="text-xs text-slate-400 mt-1"><strong class="text-slate-300">Est. cost:</strong> $0.02–0.15 per draft depending on complexity</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Lifecycle</h4>
+              <p class="text-xs text-slate-400">Spawned per task. Receives a specific brief from the Orchestrator ("draft Q2 pipeline check-in for @mike using HubSpot data + forecast call notes"). Produces artifact. Returns to Orchestrator. Session deleted.</p>
+            </div>
+          </div>
+
+          <h4 class="text-sm font-semibold text-white mb-3">Artifact Types</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-blue-400 mb-2">Check-in Drafts</h5>
+              <p class="text-xs text-slate-500"><strong>Input:</strong> Goal details, KPI data from integrations, recent meeting transcripts, previous check-ins.</p>
+              <p class="text-xs text-slate-500 mt-1"><strong>Output:</strong> Status assessment, progress narrative, blockers identified, suggested next steps. Pre-formatted for Slack Block Kit message with approve/edit buttons.</p>
+              <p class="text-xs text-slate-500 mt-1"><strong>Volume:</strong> 5–50 per week depending on org size and check-in cadence.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-blue-400 mb-2">Weekly/Monthly Digests</h5>
+              <p class="text-xs text-slate-500"><strong>Input:</strong> All goals + status changes, KPI trends, completed check-ins, action items resolved, risks detected.</p>
+              <p class="text-xs text-slate-500 mt-1"><strong>Output:</strong> Executive summary with sections: progress vs plan, risks & slippage, wins & momentum, team health, action items. Formatted for Slack channel post or Canvas.</p>
+              <p class="text-xs text-slate-500 mt-1"><strong>Volume:</strong> 1–4 per week per org.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-blue-400 mb-2">Meeting Agendas</h5>
+              <p class="text-xs text-slate-500"><strong>Input:</strong> Cadence definition, open action items from previous meeting, goal status changes since last review, suggested discussion topics from Orchestrator.</p>
+              <p class="text-xs text-slate-500 mt-1"><strong>Output:</strong> Structured agenda with time allocations, data tables, decision points flagged, and "what to prepare" per attendee.</p>
+              <p class="text-xs text-slate-500 mt-1"><strong>Volume:</strong> 2–10 per week depending on cadence count.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-blue-400 mb-2">Risk Assessments</h5>
+              <p class="text-xs text-slate-500"><strong>Input:</strong> Goal at risk, KPI trend data, meeting transcript excerpts mentioning blockers, historical pattern.</p>
+              <p class="text-xs text-slate-500 mt-1"><strong>Output:</strong> Root cause analysis, impact assessment, 2–3 recommended actions with trade-offs, suggested decision-maker to route to.</p>
+              <p class="text-xs text-slate-500 mt-1"><strong>Volume:</strong> 1–5 per week (triggered by Orchestrator detection).</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-blue-400 mb-2">Action Item Extraction</h5>
+              <p class="text-xs text-slate-500"><strong>Input:</strong> Meeting transcript from Brev's cadence engine. Attendee list with roles.</p>
+              <p class="text-xs text-slate-500 mt-1"><strong>Output:</strong> Structured list: {action, owner, deadline (inferred), confidence, source quote}. Ready for Executor to create in Brev.</p>
+              <p class="text-xs text-slate-500 mt-1"><strong>Volume:</strong> Post-meeting, 2–10 per week.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-blue-400 mb-2">Escalation Briefs</h5>
+              <p class="text-xs text-slate-500"><strong>Input:</strong> Blocked goal/task, context from Brev data + meeting history, stakeholder map.</p>
+              <p class="text-xs text-slate-500 mt-1"><strong>Output:</strong> Decision brief for escalation: situation summary, options (2–3), trade-offs for each, recommended action. Formatted for DM to decision-maker.</p>
+              <p class="text-xs text-slate-500 mt-1"><strong>Volume:</strong> 1–3 per week.</p>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <h4 class="text-sm font-semibold text-white mb-2">Tools Available</h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              <div class="bg-slate-800/30 rounded p-2"><span class="text-blue-400 font-mono">goals.get</span><br><span class="text-slate-500">Read goal details</span></div>
+              <div class="bg-slate-800/30 rounded p-2"><span class="text-blue-400 font-mono">kpis.history</span><br><span class="text-slate-500">KPI trend data</span></div>
+              <div class="bg-slate-800/30 rounded p-2"><span class="text-blue-400 font-mono">checkins.history</span><br><span class="text-slate-500">Previous check-ins</span></div>
+              <div class="bg-slate-800/30 rounded p-2"><span class="text-blue-400 font-mono">transcripts.get</span><br><span class="text-slate-500">Meeting transcripts</span></div>
+              <div class="bg-slate-800/30 rounded p-2"><span class="text-blue-400 font-mono">integrations.query</span><br><span class="text-slate-500">Pull external data</span></div>
+              <div class="bg-slate-800/30 rounded p-2"><span class="text-blue-400 font-mono">users.get</span><br><span class="text-slate-500">User profiles</span></div>
+            </div>
+            <p class="text-xs text-slate-500 mt-2"><strong class="text-red-400">Cannot:</strong> Write to Brev, send Slack messages, or modify any data. Read-only agent. All outputs go back to the Orchestrator.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Coordinator -->
+      <section id="coordinator" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400 text-sm font-mono">05</span>
+          📣 Coordinator Agent
+          <span class="tag tag-v1">Core · v1</span>
+        </h2>
+
+        <div class="card agent-card agent-coordinator rounded-xl p-6 mb-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Identity</h4>
+              <p class="text-sm text-white font-semibold">The human interface</p>
+              <p class="text-xs text-slate-400 mt-1">The ONLY agent that talks to humans. Handles all Slack interactions: delivering drafts, collecting approvals, routing questions, managing follow-up conversations. Understands tone, timing, and social dynamics.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Model & Cost</h4>
+              <p class="text-xs text-slate-400"><strong class="text-green-400">Delivery/routing:</strong> Haiku (fast, cheap — just formatting and sending)</p>
+              <p class="text-xs text-slate-400 mt-1"><strong class="text-blue-400">Conversations:</strong> Sonnet (when the human replies and needs a thoughtful response)</p>
+              <p class="text-xs text-slate-400 mt-1"><strong class="text-slate-300">Est. cost:</strong> $0.005–0.05 per interaction</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Lifecycle</h4>
+              <p class="text-xs text-slate-400">Event-driven. Activated by: Orchestrator dispatch, Slack events (reaction, thread reply, @mention), approval timeout. Manages conversation state across multiple Slack interactions.</p>
+            </div>
+          </div>
+
+          <h4 class="text-sm font-semibold text-white mb-3">Interaction Patterns</h4>
+          <div class="space-y-3">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h5 class="text-xs font-semibold text-purple-400 mb-2">Deliver & Collect</h5>
+              <p class="text-xs text-slate-400">Takes a Drafter artifact, formats it as a Slack Block Kit message, delivers to the right surface (DM, channel, thread). Attaches action buttons (Approve, Edit, Dismiss). Listens for the response. Routes the response back to the Orchestrator.</p>
+              <div class="arch-diagram rounded p-3 text-xs mt-2">
+<pre class="text-slate-500">Orchestrator → Coordinator: "deliver check-in draft to @mike via DM"
+Coordinator → Slack: posts formatted message with buttons
+Human clicks "Approve" → Coordinator → Orchestrator: "approved, execute"
+Orchestrator → Executor: "submit check-in to Brev API"</pre>
+              </div>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h5 class="text-xs font-semibold text-purple-400 mb-2">Follow-Up Conversations</h5>
+              <p class="text-xs text-slate-400">When a human replies to a follow-up with context ("the migration is delayed because we're waiting on the security review"), the Coordinator parses the response, extracts the key information (blocker = security review), updates the Orchestrator, and may ask a clarifying question ("Got it — should I flag this to @sarah who owns the security review, or are you handling it?").</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h5 class="text-xs font-semibold text-purple-400 mb-2">Escalation Delivery</h5>
+              <p class="text-xs text-slate-400">Takes an escalation brief from the Drafter and delivers it to the decision-maker with carefully framed options. Manages the conversation: "I've flagged the QA capacity issue to @sarah with three options. She chose option 2 (bring in a contractor). I'll update the goal timeline and notify the team."</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h5 class="text-xs font-semibold text-purple-400 mb-2">Social Intelligence</h5>
+              <p class="text-xs text-slate-400">Understands: don't ping the CEO about a low-priority check-in at 9pm. Don't follow up with someone who just submitted 3 check-ins (they're engaged, leave them alone). Don't escalate to a manager during their vacation. Reads user availability from Slack status + calendar data.</p>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <h4 class="text-sm font-semibold text-white mb-2">Tools Available</h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              <div class="bg-slate-800/30 rounded p-2"><span class="text-purple-400 font-mono">slack.postMessage</span><br><span class="text-slate-500">Send messages</span></div>
+              <div class="bg-slate-800/30 rounded p-2"><span class="text-purple-400 font-mono">slack.updateMessage</span><br><span class="text-slate-500">Edit messages</span></div>
+              <div class="bg-slate-800/30 rounded p-2"><span class="text-purple-400 font-mono">slack.openModal</span><br><span class="text-slate-500">Open forms</span></div>
+              <div class="bg-slate-800/30 rounded p-2"><span class="text-purple-400 font-mono">slack.react</span><br><span class="text-slate-500">Add reactions</span></div>
+              <div class="bg-slate-800/30 rounded p-2"><span class="text-purple-400 font-mono">users.status</span><br><span class="text-slate-500">Check availability</span></div>
+              <div class="bg-slate-800/30 rounded p-2"><span class="text-purple-400 font-mono">calendar.check</span><br><span class="text-slate-500">Meeting schedule</span></div>
+            </div>
+            <p class="text-xs text-slate-500 mt-2"><strong class="text-red-400">Cannot:</strong> Read or write Brev data directly. Cannot spawn other agents. All Brev context comes from the Orchestrator's task prompt.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Executor -->
+      <section id="executor" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-400 text-sm font-mono">06</span>
+          ⚡ Executor Agent
+          <span class="tag tag-v1">Core · v1</span>
+        </h2>
+
+        <div class="card agent-card agent-executor rounded-xl p-6">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Identity</h4>
+              <p class="text-sm text-white font-semibold">The doer</p>
+              <p class="text-xs text-slate-400 mt-1">The only agent that writes to Brev. Takes approved actions and executes them: submitting check-ins, updating goal status, creating action items, reassigning owners. Runs only after explicit human approval (or Orchestrator auto-approval for pre-approved action types).</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Model & Cost</h4>
+              <p class="text-xs text-slate-400"><strong class="text-green-400">Default:</strong> Haiku (structured API calls, no creativity needed)</p>
+              <p class="text-xs text-slate-400 mt-1"><strong class="text-slate-300">Est. cost:</strong> $0.002–0.01 per action (cheapest agent)</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Lifecycle</h4>
+              <p class="text-xs text-slate-400">Shortest-lived agent. Spawned with a specific action + parameters. Executes. Reports success/failure. Session deleted. Every execution is logged to the audit trail.</p>
+            </div>
+          </div>
+
+          <h4 class="text-sm font-semibold text-white mb-3">Available Actions</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead><tr class="text-left text-slate-400"><th class="px-3 py-2">Action</th><th class="px-3 py-2">Trigger</th><th class="px-3 py-2">What It Does</th><th class="px-3 py-2">Reversible?</th></tr></thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-3 py-2 text-white">Submit check-in</td><td class="px-3 py-2">User approves draft</td><td class="px-3 py-2">POST to Brev check-in API with draft content</td><td class="px-3 py-2 text-emerald-400">Yes (edit/delete)</td></tr>
+                <tr><td class="px-3 py-2 text-white">Update goal status</td><td class="px-3 py-2">User or auto-detection</td><td class="px-3 py-2">PATCH goal status (on track → at risk, etc.)</td><td class="px-3 py-2 text-emerald-400">Yes</td></tr>
+                <tr><td class="px-3 py-2 text-white">Create action item</td><td class="px-3 py-2">Post-meeting extraction</td><td class="px-3 py-2">POST action item with owner, deadline, source</td><td class="px-3 py-2 text-emerald-400">Yes (delete)</td></tr>
+                <tr><td class="px-3 py-2 text-white">Reassign owner</td><td class="px-3 py-2">Decision-maker approves</td><td class="px-3 py-2">PATCH goal/KR owner field + notify new owner</td><td class="px-3 py-2 text-emerald-400">Yes</td></tr>
+                <tr><td class="px-3 py-2 text-white">Update KPI value</td><td class="px-3 py-2">Integration sync</td><td class="px-3 py-2">PATCH KPI with new value from external source</td><td class="px-3 py-2 text-emerald-400">Yes (version history)</td></tr>
+                <tr><td class="px-3 py-2 text-white">Create goal</td><td class="px-3 py-2">User via Slack modal</td><td class="px-3 py-2">POST new goal with all fields from modal input</td><td class="px-3 py-2 text-amber-400">Requires approval to delete</td></tr>
+                <tr><td class="px-3 py-2 text-white">Mark action complete</td><td class="px-3 py-2">User confirms</td><td class="px-3 py-2">PATCH action item status → completed</td><td class="px-3 py-2 text-emerald-400">Yes (reopen)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-xs text-slate-500 mt-3"><strong class="text-red-400">Every execution is logged:</strong> who approved it, what changed, previous value, new value, timestamp. This audit trail is displayed in the Brev web app and accessible to admins.</p>
+        </div>
+      </section>
+
+      <!-- Integrator -->
+      <section id="integrator" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 text-sm font-mono">07</span>
+          🔌 Integrator Agent
+          <span class="tag tag-v1">Core · v1</span>
+        </h2>
+
+        <div class="card agent-card agent-integrator rounded-xl p-6">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Identity</h4>
+              <p class="text-sm text-white font-semibold">The data bridge</p>
+              <p class="text-xs text-slate-400 mt-1">Connects Brev to the outside world. Pulls data from HubSpot, Linear, Jira, GitHub, Google Sheets, Salesforce, and more. Reconciles external state with Brev's model. The reason the Operator can draft check-ins with real data.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Model & Cost</h4>
+              <p class="text-xs text-slate-400"><strong class="text-green-400">Default:</strong> Haiku (structured API calls, data mapping)</p>
+              <p class="text-xs text-slate-400 mt-1"><strong class="text-slate-300">Est. cost:</strong> $0.005–0.02 per sync operation</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Lifecycle</h4>
+              <p class="text-xs text-slate-400">Dual mode: (1) Scheduled — runs on cron to sync integration data (every 1–4 hours). (2) On-demand — Orchestrator or Drafter requests fresh data for a specific task.</p>
+            </div>
+          </div>
+
+          <h4 class="text-sm font-semibold text-white mb-3">Supported Integrations (v1)</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-cyan-400 mb-2">CRM / Revenue</h5>
+              <ul class="text-xs text-slate-400 space-y-1">
+                <li><strong class="text-white">HubSpot:</strong> Pipeline value, deal stages, forecast, activity metrics. Maps to ARR/pipeline KPIs.</li>
+                <li><strong class="text-white">Salesforce:</strong> Opportunity pipeline, win rates, rep activity. Maps to revenue goals.</li>
+              </ul>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-cyan-400 mb-2">Engineering</h5>
+              <ul class="text-xs text-slate-400 space-y-1">
+                <li><strong class="text-white">Linear:</strong> Sprint velocity, issue counts, cycle time. Maps to engineering goals.</li>
+                <li><strong class="text-white">GitHub:</strong> PR throughput, CI pass rate, deploy frequency. Maps to dev velocity goals.</li>
+                <li><strong class="text-white">Jira:</strong> Story points completed, sprint burndown, backlog size.</li>
+              </ul>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-cyan-400 mb-2">Analytics / Data</h5>
+              <ul class="text-xs text-slate-400 space-y-1">
+                <li><strong class="text-white">Google Sheets:</strong> Custom KPI tracking sheets (manual metrics not in other tools).</li>
+                <li><strong class="text-white">Looker / Metabase:</strong> Dashboard metric queries. Auto-track KPIs from BI tools.</li>
+              </ul>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-cyan-400 mb-2">Productivity</h5>
+              <ul class="text-xs text-slate-400 space-y-1">
+                <li><strong class="text-white">Google Calendar:</strong> Meeting schedules, cadence timing, attendee availability.</li>
+                <li><strong class="text-white">Google Docs:</strong> Shared documents referenced in goals.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-4 border-t border-slate-700/50">
+            <h4 class="text-sm font-semibold text-white mb-2">How Integration Data Flows</h4>
+            <div class="arch-diagram rounded-lg p-3 text-xs">
+<pre class="text-slate-400">
+<span class="text-cyan-400">Integrator</span> → queries HubSpot API → gets pipeline: $1.2M
+  → compares to Brev KPI "New Pipeline" current value: $1.4M
+  → detects: pipeline dropped $200K since last sync
+  → returns to Orchestrator: { kpi: "pipeline", delta: -200K, threshold_breach: true }
+  → Orchestrator decides: spawn <span class="text-blue-400">Drafter</span>(alert) + <span class="text-purple-400">Coordinator</span>(notify_vp_sales)
+</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- V2 AGENTS -->
+
+      <!-- Analyst -->
+      <section id="analyst" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm font-mono">08</span>
+          🔎 Analyst Agent
+          <span class="tag tag-v2">Advanced · v2</span>
+        </h2>
+        <div class="card agent-card agent-analyst rounded-xl p-6">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Identity</h4>
+              <p class="text-sm text-white font-semibold">The detective</p>
+              <p class="text-xs text-slate-400 mt-1">Goes beyond surface-level reporting. When the Orchestrator detects a problem ("NPS dropped 15 points"), the Analyst investigates <em>why</em>. Cross-references multiple data sources, identifies correlations, and produces evidence-based analysis.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Model & Cost</h4>
+              <p class="text-xs text-slate-400"><strong class="text-orange-400">Default:</strong> Opus (complex reasoning, multi-source synthesis)</p>
+              <p class="text-xs text-slate-400 mt-1"><strong class="text-slate-300">Est. cost:</strong> $0.50–2.00 per analysis (highest per-task cost)</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">When It's Needed</h4>
+              <p class="text-xs text-slate-400">Triggered when: KPI shows unexpected trend, goal status changes to At Risk, user asks "why is X happening?", quarterly deep-dives, board prep.</p>
+            </div>
+          </div>
+
+          <h4 class="text-sm font-semibold text-white mb-3">Analysis Types</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-emerald-400">Root Cause Analysis</h5>
+              <p class="text-xs text-slate-500 mt-1">"Pipeline dropped 20% this month" → Analyst checks: deal stage conversions, rep activity, average deal size, time-in-stage, new deal creation rate. Finds: 3 large deals slipped from commit to negotiate, reducing pipeline by $800K. Rep activity is flat — not a volume problem, it's a conversion problem in late-stage deals.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-emerald-400">Trend Detection</h5>
+              <p class="text-xs text-slate-500 mt-1">Runs weekly on all KPIs. Identifies: accelerating trends (good or bad), plateau patterns (stalled progress), seasonal patterns, anomalies. Surfaces trends that humans might not notice until the quarterly review.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-emerald-400">Cross-Goal Correlation</h5>
+              <p class="text-xs text-slate-500 mt-1">"Engineering velocity down 15%" + "QA backlog up 40%" + "3 meetings flagged deployment blockers" → Analyst connects these signals: QA capacity is the bottleneck, it's affecting eng velocity and deployment goals. Single root cause, multiple symptoms.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-emerald-400">What-If Scenarios</h5>
+              <p class="text-xs text-slate-500 mt-1">"If we push the V2 launch by 2 weeks, what goals are affected?" → Analyst traces dependencies: launch goal pushes, marketing campaign timing shifts, Q2 ARR forecast adjusts. Produces a decision brief with quantified impact.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Researcher -->
+      <section id="researcher" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center text-violet-400 text-sm font-mono">09</span>
+          🌐 Researcher Agent
+          <span class="tag tag-v2">Advanced · v2</span>
+        </h2>
+        <div class="card agent-card agent-researcher rounded-xl p-6">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <p class="text-sm text-white font-semibold">The scout</p>
+              <p class="text-xs text-slate-400 mt-1">Looks outside the company. Monitors competitors, researches market trends, benchmarks performance, and gathers external context to inform goal-setting and strategy adjustments.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <p class="text-xs text-slate-400"><strong class="text-blue-400">Default:</strong> Sonnet (web research, synthesis)</p>
+              <p class="text-xs text-slate-400 mt-1"><strong class="text-slate-300">Tools:</strong> Web search, web fetch, browser automation</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <p class="text-xs text-slate-400"><strong>Use cases:</strong></p>
+              <ul class="text-xs text-slate-500 mt-1 space-y-1">
+                <li>• "How does our NPS compare to industry benchmarks?"</li>
+                <li>• "What are competitors doing about X?"</li>
+                <li>• "Research best practices for reducing churn"</li>
+                <li>• Market sizing for new goal targets</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- OKR Coach -->
+      <section id="coach" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center text-pink-400 text-sm font-mono">10</span>
+          🎯 OKR Coach Agent
+          <span class="tag tag-v2">Advanced · v2</span>
+        </h2>
+        <div class="card agent-card agent-coach rounded-xl p-6">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <p class="text-sm text-white font-semibold">The mentor</p>
+              <p class="text-xs text-slate-400 mt-1">80%+ of successful OKR companies have dedicated OKR coaches. This agent replaces that role. Reviews goal quality, suggests improvements, identifies alignment gaps, and teaches teams OKR best practices — all through Slack conversations.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <p class="text-xs text-slate-400"><strong class="text-orange-400">Model:</strong> Opus (nuanced feedback on goal quality requires strong reasoning)</p>
+              <p class="text-xs text-slate-400 mt-1"><strong class="text-slate-300">Knowledge:</strong> Trained on OKR methodology (Doerr, Wodtke, Niven & Lamorte), Brev best practices, org-specific patterns</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <p class="text-xs text-slate-400"><strong>Capabilities:</strong></p>
+              <ul class="text-xs text-slate-500 mt-1 space-y-1">
+                <li>• Review goal quality: measurable? ambitious enough? aligned?</li>
+                <li>• Suggest key results for a given objective</li>
+                <li>• Identify cascading alignment gaps</li>
+                <li>• Post-cycle retrospective analysis</li>
+                <li>• Flag goals that are vanity metrics vs. real outcomes</li>
+                <li>• Suggest goal consolidation (too many goals = no focus)</li>
+              </ul>
+            </div>
+          </div>
+          <div class="bg-slate-800/30 rounded-lg p-4 mt-2">
+            <h5 class="text-xs font-semibold text-pink-400 mb-2">Example Interaction</h5>
+            <div class="space-y-2 text-xs">
+              <p class="text-slate-400"><strong class="text-white">User:</strong> "@brev review my team's Q3 OKRs"</p>
+              <p class="text-slate-400"><strong class="text-orange-400">Coach:</strong> "Reviewed 4 objectives and 12 key results for the Product team. Issues found:</p>
+              <ul class="text-slate-400 pl-4 space-y-1">
+                <li>• KR 'Improve user experience' is not measurable. Suggest: 'Increase task completion rate from 67% to 85%' or 'Reduce time-to-value for new users from 12min to 5min.'</li>
+                <li>• Objective 'Launch V2' has 5 key results — most effective OKRs have 2–3. Consider splitting into two objectives or consolidating KRs.</li>
+                <li>• No alignment link between your 'Reduce churn' KR and the company goal 'Improve NRR to 130%.' Should this be a child goal?"</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- V3: Enterprise -->
+
+      <!-- Onboarding -->
+      <section id="onboarding" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm font-mono">11</span>
+          🚀 Onboarding Agent
+          <span class="tag tag-v3">Enterprise · v3</span>
+        </h2>
+        <div class="card agent-card agent-onboarding rounded-xl p-6">
+          <p class="text-sm text-slate-400 mb-4">Guides new users and teams through Brev setup via Slack DMs. Personalized onboarding flow based on role (exec vs. manager vs. IC), team, and org maturity. Reduces time-to-value from weeks to days.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-emerald-400">Onboarding Flow</h5>
+              <ul class="text-xs text-slate-500 space-y-1">
+                <li>1. Welcome DM + role detection</li>
+                <li>2. Walk through creating first goal (via modal)</li>
+                <li>3. Connect integrations relevant to their role</li>
+                <li>4. Show first check-in draft, explain Operator</li>
+                <li>5. Set personal preferences (notification freq, DM vs channel)</li>
+                <li>6. Introduce to team's existing goals + upcoming cadences</li>
+              </ul>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-emerald-400">Team Onboarding</h5>
+              <ul class="text-xs text-slate-500 space-y-1">
+                <li>• Guided OKR-setting workshop via Slack (Coach agent assists)</li>
+                <li>• Template goals for common team types (Sales, Eng, Product, CS)</li>
+                <li>• Integration setup wizard per team</li>
+                <li>• First cadence scheduling</li>
+                <li>• 30-day health check: "Your team has been on Brev for 30 days. Here's what's working and what to improve."</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Compliance -->
+      <section id="compliance" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center text-red-400 text-sm font-mono">12</span>
+          🛡️ Compliance Agent
+          <span class="tag tag-v3">Enterprise · v3</span>
+        </h2>
+        <div class="card agent-card agent-compliance rounded-xl p-6">
+          <p class="text-sm text-slate-400 mb-4">Audits org-wide goal health, process adherence, and data quality on a scheduled basis. Enterprise customers need this for board reporting, investor updates, and regulatory compliance (SOC2 evidence of operational controls).</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-red-400">What It Audits</h5>
+              <ul class="text-xs text-slate-500 space-y-1">
+                <li>• Goal coverage: does every team have OKRs? Any orphaned goals?</li>
+                <li>• Check-in compliance: % of goals with recent updates</li>
+                <li>• Alignment integrity: are child goals actually aligned to parents?</li>
+                <li>• Stale data: KPIs not updated in 30+ days</li>
+                <li>• Operator action audit: all AI actions logged with approver</li>
+                <li>• Data quality: duplicate goals, missing owners, incomplete KRs</li>
+              </ul>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-3">
+              <h5 class="text-xs font-semibold text-red-400">Output</h5>
+              <ul class="text-xs text-slate-500 space-y-1">
+                <li>• Monthly compliance report (PDF/Canvas)</li>
+                <li>• Health score per team (0–100)</li>
+                <li>• Automated fix suggestions with 1-click apply</li>
+                <li>• Exportable audit trail for SOC2 evidence</li>
+                <li>• Board-ready OKR summary generator</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Custom Agents -->
+      <section id="custom" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-slate-500/20 flex items-center justify-center text-slate-400 text-sm font-mono">13</span>
+          🔧 Custom Agents (Platform Play)
+          <span class="tag tag-v3">Enterprise · v3</span>
+        </h2>
+        <div class="card rounded-xl p-6">
+          <p class="text-sm text-slate-400 mb-4">The long-term vision: let customers build their own Operator agents tailored to their workflows. A company that tracks hiring goals needs a Recruiting Agent. A company with quarterly board meetings needs a Board Prep Agent. The platform provides the runtime; the customer defines the behavior.</p>
+          <div class="bg-slate-800/30 rounded-lg p-4">
+            <h5 class="text-xs font-semibold text-white mb-2">Custom Agent SDK</h5>
+            <div class="arch-diagram rounded-lg p-3 text-xs">
+<pre class="text-slate-400">{
+  "name": "Board Prep Agent",
+  "trigger": { "type": "schedule", "cron": "0 9 * * 1", "condition": "board_meeting_this_week" },
+  "tools": ["goals.list", "kpis.history", "transcripts.search", "artifacts.create"],
+  "model": "sonnet",
+  "prompt": "Generate a board-ready company performance summary...",
+  "output": { "type": "canvas", "channel": "#board-prep" }
+}</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Design Patterns -->
+      <section id="patterns" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">14</span>
+          Agent Design Patterns
+        </h2>
+        <div class="card rounded-xl p-6">
+          <div class="space-y-4">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-white mb-2">1. Principle of Least Privilege</h4>
+              <p class="text-xs text-slate-400">Each agent gets only the tools it needs. Drafters can't write. Executors can't read beyond their task scope. The Coordinator can't access Brev data directly. This prevents cascading failures and makes the system auditable.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-white mb-2">2. Single Responsibility</h4>
+              <p class="text-xs text-slate-400">Each agent does one thing well. The Drafter doesn't decide what to write — the Orchestrator decides. The Coordinator doesn't decide what to say — the Drafter writes it. This makes agents replaceable, testable, and cost-optimizable (use the cheapest model that can do the job).</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-white mb-2">3. Human-in-the-Loop by Default</h4>
+              <p class="text-xs text-slate-400">Every write operation goes through the Executor, which only runs after approval. Approval can be: explicit (button click), implicit (✅ reaction), or pre-approved (org admin configured auto-approval for this action type). Never silent writes.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-white mb-2">4. Fail Gracefully, Explain Clearly</h4>
+              <p class="text-xs text-slate-400">When an agent fails (API error, model refusal, timeout), it returns a structured error to the Orchestrator, which decides: retry, skip, or escalate to human. The Coordinator always explains what happened in plain English: "I tried to pull your pipeline data from HubSpot but the connection timed out. I'll try again in 30 minutes, or you can update manually."</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-white mb-2">5. Stateless Agents, Stateful Orchestrator</h4>
+              <p class="text-xs text-slate-400">Worker agents (Drafter, Executor, Integrator, Coordinator) are stateless — they receive everything they need in the task prompt and return results. Only the Orchestrator maintains persistent state (task queue, completion history, user interaction patterns). This makes worker agents horizontally scalable and cheap to replace.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Model Selection -->
+      <section id="models" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">15</span>
+          Model Selection Strategy
+        </h2>
+        <div class="card rounded-xl p-6">
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left text-slate-400">
+                  <th class="px-3 py-2">Model</th>
+                  <th class="px-3 py-2">Cost (input/output per 1M tokens)</th>
+                  <th class="px-3 py-2">Speed</th>
+                  <th class="px-3 py-2">Used By</th>
+                  <th class="px-3 py-2">When</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-3 py-2 font-medium text-white">Haiku</td><td class="px-3 py-2 font-mono">$0.25 / $1.25</td><td class="px-3 py-2 text-emerald-400">Fastest</td><td class="px-3 py-2">Executor, Integrator, Coordinator (routing)</td><td class="px-3 py-2">Structured tasks, API calls, simple formatting</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Sonnet</td><td class="px-3 py-2 font-mono">$3 / $15</td><td class="px-3 py-2 text-blue-400">Fast</td><td class="px-3 py-2">Drafter, Coordinator (conversations), Researcher</td><td class="px-3 py-2">Writing, synthesis, conversations, intent detection</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Opus</td><td class="px-3 py-2 font-mono">$15 / $75</td><td class="px-3 py-2 text-orange-400">Moderate</td><td class="px-3 py-2">Orchestrator (planning), Analyst, OKR Coach</td><td class="px-3 py-2">Complex reasoning, multi-step planning, nuanced analysis</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-4 pt-4 border-t border-slate-700/50">
+            <h4 class="text-sm font-semibold text-white mb-2">Cost Estimate: 100-Person Org, Active Use</h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div class="bg-slate-800/30 rounded-lg p-3 text-center">
+                <div class="text-lg font-bold text-orange-400">$80–120</div>
+                <div class="text-slate-500">Orchestrator/mo</div>
+                <div class="text-slate-600">(6 planning loops/day × 22 days)</div>
+              </div>
+              <div class="bg-slate-800/30 rounded-lg p-3 text-center">
+                <div class="text-lg font-bold text-blue-400">$40–80</div>
+                <div class="text-slate-500">Drafters/mo</div>
+                <div class="text-slate-600">(~200 drafts/mo)</div>
+              </div>
+              <div class="bg-slate-800/30 rounded-lg p-3 text-center">
+                <div class="text-lg font-bold text-green-400">$15–30</div>
+                <div class="text-slate-500">Other agents/mo</div>
+                <div class="text-slate-600">(Executor + Integrator + Coordinator)</div>
+              </div>
+              <div class="bg-slate-800/30 rounded-lg p-3 text-center">
+                <div class="text-lg font-bold text-white">$135–230</div>
+                <div class="text-slate-500">Total AI cost/org/mo</div>
+                <div class="text-slate-600">($1.35–2.30/user/mo)</div>
+              </div>
+            </div>
+            <p class="text-xs text-slate-500 mt-3">At $25/user/mo pricing with 100 users ($2,500/mo revenue), AI costs are 5–9% of revenue. Healthy margin. The cost scales sub-linearly: a 500-person org doesn't need 5× more planning loops — just bigger context windows.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Company Scenarios -->
+      <section id="scenarios" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">16</span>
+          Which Agents Does a Company Need?
+        </h2>
+        <div class="space-y-4">
+          <div class="card rounded-xl p-6">
+            <div class="flex items-center gap-3 mb-4">
+              <h3 class="text-white font-semibold">Seed-Stage Startup (10–20 people)</h3>
+              <span class="tag tag-v1">3 agents</span>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">CEO is the de facto COO. Goals are informal. Meetings are unstructured. The Operator reduces the CEO's ops overhead so they can focus on product and customers.</p>
+            <div class="flex flex-wrap gap-2 text-xs">
+              <span class="px-2 py-1 bg-red-500/10 text-red-400 rounded">🧠 Orchestrator (lightweight)</span>
+              <span class="px-2 py-1 bg-blue-500/10 text-blue-400 rounded">📝 Drafter</span>
+              <span class="px-2 py-1 bg-purple-500/10 text-purple-400 rounded">📣 Coordinator</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-2"><strong>Key value:</strong> Weekly digest to the team. Check-in reminders that actually draft the update. Meeting action item tracking. No Chief of Staff needed yet.</p>
+          </div>
+
+          <div class="card rounded-xl p-6">
+            <div class="flex items-center gap-3 mb-4">
+              <h3 class="text-white font-semibold">Growth-Stage Company (50–200 people)</h3>
+              <span class="tag tag-v1">5 agents</span>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">Multiple teams with their own OKRs. Regular cadences (standups, QBRs). Integrations matter. The Operator replaces the Chief of Staff's operational coordination work.</p>
+            <div class="flex flex-wrap gap-2 text-xs">
+              <span class="px-2 py-1 bg-red-500/10 text-red-400 rounded">🧠 Orchestrator</span>
+              <span class="px-2 py-1 bg-blue-500/10 text-blue-400 rounded">📝 Drafter</span>
+              <span class="px-2 py-1 bg-purple-500/10 text-purple-400 rounded">📣 Coordinator</span>
+              <span class="px-2 py-1 bg-amber-500/10 text-amber-400 rounded">⚡ Executor</span>
+              <span class="px-2 py-1 bg-cyan-500/10 text-cyan-400 rounded">🔌 Integrator</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-2"><strong>Key value:</strong> Auto-tracked KPIs from HubSpot/Linear/GitHub. Proactive follow-ups on meeting commitments. Risk detection before QBR. $150K+ in ops coordination savings.</p>
+          </div>
+
+          <div class="card rounded-xl p-6">
+            <div class="flex items-center gap-3 mb-4">
+              <h3 class="text-white font-semibold">Scale-Up / Enterprise (200–2000 people)</h3>
+              <span class="tag tag-v2">8+ agents</span>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">Complex org structure. Board reporting requirements. Multiple business units. Cross-functional dependencies. The Operator is the operational nervous system connecting all teams.</p>
+            <div class="flex flex-wrap gap-2 text-xs">
+              <span class="px-2 py-1 bg-red-500/10 text-red-400 rounded">🧠 Orchestrator</span>
+              <span class="px-2 py-1 bg-blue-500/10 text-blue-400 rounded">📝 Drafter</span>
+              <span class="px-2 py-1 bg-purple-500/10 text-purple-400 rounded">📣 Coordinator</span>
+              <span class="px-2 py-1 bg-amber-500/10 text-amber-400 rounded">⚡ Executor</span>
+              <span class="px-2 py-1 bg-cyan-500/10 text-cyan-400 rounded">🔌 Integrator</span>
+              <span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded">🔎 Analyst</span>
+              <span class="px-2 py-1 bg-pink-500/10 text-pink-400 rounded">🎯 OKR Coach</span>
+              <span class="px-2 py-1 bg-red-500/10 text-red-400 rounded">🛡️ Compliance</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-2"><strong>Key value:</strong> Cross-BU dependency tracking. Board-ready reporting. Goal health auditing. OKR coaching at scale. Root cause analysis when metrics slip. Saves multiple ops headcount.</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.nav-link');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          navLinks.forEach(link => link.classList.remove('active'));
+          const active = document.querySelector(`.nav-link[href="#${entry.target.id}"]`);
+          if (active) active.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -80% 0px' });
+    sections.forEach(section => observer.observe(section));
+  </script>
+</body>
+</html>

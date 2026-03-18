@@ -1,0 +1,1568 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orchestration Deep Dive — Brev Operator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwindcss.config = {
+      theme: {
+        extend: {
+          colors: { slate: { 850: '#172033', 950: '#0a0f1a' } },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body { background: #0a0f1a; }
+    .gradient-text { background: linear-gradient(135deg, #f97316, #ef4444, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .gradient-text-blue { background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(100, 116, 139, 0.2); backdrop-filter: blur(12px); transition: border-color 0.2s; }
+    .card:hover { border-color: rgba(249, 115, 22, 0.3); }
+    .glow { box-shadow: 0 0 60px rgba(249, 115, 22, 0.06); }
+    .nav-link.active { color: #f97316; border-left-color: #f97316; }
+    .tag { font-size: 0.65rem; padding: 2px 8px; border-radius: 9999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .tag-rec { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .tag-draft { background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
+    .tag-new { background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.3); }
+    .arch-diagram { background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(100, 116, 139, 0.2); font-family: 'JetBrains Mono', monospace; overflow-x: auto; }
+    .phase-line { position: relative; }
+    .phase-line::before { content: ''; position: absolute; left: 15px; top: 40px; bottom: 0; width: 2px; background: linear-gradient(to bottom, #f97316, transparent); }
+    table { border-collapse: separate; border-spacing: 0; }
+    th { background: rgba(30, 41, 59, 0.8); }
+    td, th { border-bottom: 1px solid rgba(100, 116, 139, 0.15); }
+    .flow-arrow { color: #475569; }
+    .slack-bubble { background: rgba(74, 21, 75, 0.15); border: 1px solid rgba(74, 21, 75, 0.3); border-radius: 0.75rem; }
+    .brev-bubble { background: rgba(249, 115, 22, 0.08); border: 1px solid rgba(249, 115, 22, 0.2); border-radius: 0.75rem; }
+    @media (max-width: 1024px) { .sidebar { display: none; } }
+  </style>
+</head>
+<body class="text-slate-300 font-sans antialiased">
+
+  <!-- Header -->
+  <header class="fixed top-0 w-full z-50 border-b border-slate-800/50 bg-[#0a0f1a]/80 backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+        </div>
+        <span class="font-bold text-white text-lg">Orchestration Deep Dive</span>
+        <span class="tag tag-draft ml-2">RFC Draft</span>
+        <span class="tag tag-new ml-1">Technical</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm">
+        <a href="brev-operator.html" class="text-orange-400 hover:text-orange-300 transition-colors">← Back to Planning Doc</a>
+        <span class="text-slate-500">2026-03-18</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex">
+    <!-- Sidebar -->
+    <nav class="sidebar fixed left-0 top-16 bottom-0 w-56 border-r border-slate-800/50 bg-[#0a0f1a]/60 backdrop-blur-xl overflow-y-auto py-6 px-4 z-40">
+      <div class="space-y-1 text-sm">
+        <p class="px-3 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">Overview</p>
+        <a href="#overview" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Three Loops</a>
+        <p class="px-3 py-1 mt-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Loop 1</p>
+        <a href="#loop1" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Proactive Planning</a>
+        <a href="#loop1-scanning" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">State Scanning</a>
+        <a href="#loop1-decision" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Decision Tree</a>
+        <a href="#loop1-timing" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Timing Strategy</a>
+        <a href="#loop1-context" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Context Assembly</a>
+        <a href="#loop1-example" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Example Walkthrough</a>
+        <p class="px-3 py-1 mt-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Loop 2</p>
+        <a href="#loop2" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Reactive Handling</a>
+        <a href="#loop2-intent" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Intent Detection</a>
+        <a href="#loop2-reactions" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Reaction Approvals</a>
+        <a href="#loop2-threads" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Thread Routing</a>
+        <a href="#loop2-errors" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Error Handling</a>
+        <a href="#loop2-example" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Example Walkthrough</a>
+        <p class="px-3 py-1 mt-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Loop 3</p>
+        <a href="#loop3" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Cadence Lifecycle</a>
+        <a href="#loop3-pre" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Pre-Meeting</a>
+        <a href="#loop3-during" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">During Meeting</a>
+        <a href="#loop3-post" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Post-Meeting</a>
+        <a href="#loop3-between" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Between Meetings</a>
+        <a href="#loop3-example" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Example Walkthrough</a>
+        <p class="px-3 py-1 mt-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Cross-Loop</p>
+        <a href="#cross-loop" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Coordination</a>
+        <a href="#state-machine" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">State Machine</a>
+        <a href="#conflicts" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all pl-6 text-xs">Conflict Resolution</a>
+      </div>
+    </nav>
+
+    <!-- Main -->
+    <main class="ml-0 lg:ml-56 flex-1 max-w-4xl mx-auto px-6 pt-28 pb-20">
+
+      <!-- Hero -->
+      <section class="mb-16">
+        <div class="flex items-center gap-2 text-sm text-orange-400 mb-4 font-medium">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Deep Dive · Orchestration Engine
+        </div>
+        <h1 class="text-4xl md:text-5xl font-black text-white leading-tight mb-4">
+          Three Loops,<br><span class="gradient-text">One Operator</span>
+        </h1>
+        <p class="text-lg text-slate-400 max-w-2xl mb-8">
+          This document details the internal mechanics of Brev Operator's orchestration engine — the three interlocking loops that drive proactive planning, reactive handling, and cadence lifecycle management. Every algorithm, decision tree, and data flow explained.
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <span class="px-3 py-1 rounded-full bg-orange-500/10 text-orange-400 text-sm border border-orange-500/20">Cron-Driven</span>
+          <span class="px-3 py-1 rounded-full bg-purple-500/10 text-purple-400 text-sm border border-purple-500/20">Event-Driven</span>
+          <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-sm border border-emerald-500/20">Meeting-Driven</span>
+          <span class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-sm border border-blue-500/20">Cross-Loop Coordination</span>
+        </div>
+      </section>
+
+      <!-- ===== OVERVIEW ===== -->
+      <section id="overview" class="mb-20">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="text-orange-400 font-mono text-sm">0.0</span>
+          Architecture Overview
+        </h2>
+        <div class="card rounded-xl p-6 mb-6">
+          <p class="text-slate-400 mb-4">The Operator runs three concurrent loops that share a unified state store and action queue. Each loop has a distinct trigger mechanism but they coordinate through a shared task lifecycle state machine and a global action deduplication layer.</p>
+          <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400 mb-0">
+┌─────────────────────────────────────────────────────────────────────┐
+│                        BREV OPERATOR ENGINE                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   ┌──────────────┐   ┌──────────────┐   ┌──────────────────────┐   │
+│   │   LOOP 1      │   │   LOOP 2      │   │   LOOP 3              │   │
+│   │   Proactive   │   │   Reactive    │   │   Cadence Lifecycle   │   │
+│   │   ───────     │   │   ────────    │   │   ─────────────────   │   │
+│   │   Cron @ 5min │   │   Slack Events│   │   Calendar Events     │   │
+│   │               │   │   @mentions   │   │   Transcript Hooks    │   │
+│   │  ┌─────────┐  │   │  ┌─────────┐  │   │  ┌────────────────┐   │   │
+│   │  │ Scanner  │  │   │  │ Intent  │  │   │  │ Agenda Builder │   │   │
+│   │  │ Engine   │  │   │  │ Parser  │  │   │  │ Action Extract │   │   │
+│   │  └────┬─────┘  │   │  └────┬─────┘  │   │  └───────┬────────┘   │   │
+│   │       │        │   │       │        │   │          │            │   │
+│   └───────┼────────┘   └───────┼────────┘   └──────────┼────────────┘   │
+│           │                    │                       │                │
+│           ▼                    ▼                       ▼                │
+│   ┌─────────────────────────────────────────────────────────────┐      │
+│   │                    ACTION QUEUE                               │      │
+│   │         (deduplication · priority · rate-limit)              │      │
+│   └──────────────────────┬──────────────────────────────────────┘      │
+│                          ▼                                             │
+│   ┌─────────────────────────────────────────────────────────────┐      │
+│   │                  SHARED STATE STORE                          │      │
+│   │   Tasks · Goals · Metrics · People · Cadences · History     │      │
+│   └─────────────────────────────────────────────────────────────┘      │
+│                          ▼                                             │
+│   ┌─────────────────────────────────────────────────────────────┐      │
+│   │                  SLACK DELIVERY LAYER                        │      │
+│   │        DM · Channel · Thread · Reaction · Ephemeral         │      │
+│   └─────────────────────────────────────────────────────────────┘      │
+└─────────────────────────────────────────────────────────────────────┘</pre>
+        </div>
+      </section>
+
+      <!-- ===== LOOP 1: PROACTIVE PLANNING ===== -->
+      <section id="loop1" class="mb-20">
+        <h2 class="text-3xl font-black text-white mb-2 flex items-center gap-3">
+          <span class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 font-mono text-sm font-bold">L1</span>
+          Proactive Planning
+        </h2>
+        <p class="text-slate-500 mb-8 text-sm">Cron-driven · Runs every 5 minutes · Scans organizational state · Initiates actions</p>
+
+        <!-- 1.1 State Scanning -->
+        <div id="loop1-scanning" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-orange-400 font-mono text-sm">1.1</span>
+            State Scanning Algorithm
+          </h3>
+          <div class="card rounded-xl p-6 mb-4">
+            <p class="text-slate-400 mb-4">Every 5 minutes, the scanner runs a prioritized sweep across the entire org data model. Scans are ordered by urgency — the highest-priority items get evaluated first, and the scanner can short-circuit if the action budget (max actions per cycle) is exhausted.</p>
+            
+            <h4 class="text-sm font-semibold text-white mb-3 mt-6">Scan Priority Order</h4>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-slate-400">
+                    <th class="px-4 py-3 rounded-tl-lg">Priority</th>
+                    <th class="px-4 py-3">Data Point</th>
+                    <th class="px-4 py-3">Check</th>
+                    <th class="px-4 py-3 rounded-tr-lg">Action Budget</th>
+                  </tr>
+                </thead>
+                <tbody class="text-slate-300">
+                  <tr>
+                    <td class="px-4 py-3"><span class="text-red-400 font-mono font-bold">P0</span></td>
+                    <td class="px-4 py-3">Blocked tasks</td>
+                    <td class="px-4 py-3">Tasks marked blocked &gt; 24h with no activity</td>
+                    <td class="px-4 py-3 font-mono text-xs">3 actions/cycle</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3"><span class="text-red-400 font-mono font-bold">P0</span></td>
+                    <td class="px-4 py-3">Missed deadlines</td>
+                    <td class="px-4 py-3">Due date passed, status ≠ completed</td>
+                    <td class="px-4 py-3 font-mono text-xs">5 actions/cycle</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3"><span class="text-orange-400 font-mono font-bold">P1</span></td>
+                    <td class="px-4 py-3">Stale commitments</td>
+                    <td class="px-4 py-3">Action items from meetings with no update in &gt;3 days</td>
+                    <td class="px-4 py-3 font-mono text-xs">5 actions/cycle</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3"><span class="text-orange-400 font-mono font-bold">P1</span></td>
+                    <td class="px-4 py-3">Goal health</td>
+                    <td class="px-4 py-3">KR progress vs. expected trajectory (linear interpolation)</td>
+                    <td class="px-4 py-3 font-mono text-xs">3 actions/cycle</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3"><span class="text-yellow-400 font-mono font-bold">P2</span></td>
+                    <td class="px-4 py-3">Metric anomalies</td>
+                    <td class="px-4 py-3">Connected metrics deviating &gt;2σ from 30-day trend</td>
+                    <td class="px-4 py-3 font-mono text-xs">2 actions/cycle</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3"><span class="text-yellow-400 font-mono font-bold">P2</span></td>
+                    <td class="px-4 py-3">Upcoming deadlines</td>
+                    <td class="px-4 py-3">Tasks due within 48h with &lt;50% estimated completion</td>
+                    <td class="px-4 py-3 font-mono text-xs">3 actions/cycle</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3"><span class="text-green-400 font-mono font-bold">P3</span></td>
+                    <td class="px-4 py-3">Check-in schedule</td>
+                    <td class="px-4 py-3">People who haven't updated status in &gt;5 business days</td>
+                    <td class="px-4 py-3 font-mono text-xs">10 actions/cycle</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3"><span class="text-green-400 font-mono font-bold">P3</span></td>
+                    <td class="px-4 py-3">Reporting cadence</td>
+                    <td class="px-4 py-3">Weekly/monthly reports due within next business day</td>
+                    <td class="px-4 py-3 font-mono text-xs">2 actions/cycle</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4 class="text-sm font-semibold text-white mb-3 mt-6">Scan Algorithm Pseudocode</h4>
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+async function runProactiveScan(org: Organization) {
+  const budget = new ActionBudget(MAX_ACTIONS_PER_CYCLE)  // default: 20
+  const now = DateTime.now()
+  const bizHours = getBusinessHours(org.timezone)
+  
+  if (!bizHours.isActive(now)) return  // Skip outside business hours
+
+  // P0: Critical — blocked tasks
+  const blocked = await db.tasks.find({
+    orgId: org.id,
+    status: 'blocked',
+    lastActivityAt: { $lt: now.minus({ hours: 24 }) }
+  })
+  for (const task of blocked) {
+    if (!budget.canSpend()) break
+    const action = buildEscalation(task, task.owner, task.owner.manager)
+    await actionQueue.enqueue(action, { priority: 'critical', dedupKey: `blocked:${task.id}` })
+    budget.spend()
+  }
+
+  // P0: Critical — missed deadlines
+  const overdue = await db.tasks.find({
+    orgId: org.id,
+    dueDate: { $lt: now },
+    status: { $nin: ['completed', 'cancelled'] }
+  })
+  for (const task of overdue) {
+    if (!budget.canSpend()) break
+    const daysPast = now.diff(task.dueDate, 'days')
+    const action = daysPast > 3
+      ? buildEscalation(task, task.owner, task.owner.manager)
+      : buildFollowUp(task, task.owner)
+    await actionQueue.enqueue(action, { priority: 'critical', dedupKey: `overdue:${task.id}` })
+    budget.spend()
+  }
+
+  // P1: High — stale commitments from meetings
+  const staleCommitments = await db.actionItems.find({
+    orgId: org.id,
+    source: 'meeting_transcript',
+    status: 'open',
+    lastUpdateAt: { $lt: now.minus({ days: 3 }) }
+  })
+  for (const item of staleCommitments) {
+    if (!budget.canSpend()) break
+    const action = buildContextualFollowUp(item, item.owner, {
+      meetingName: item.sourceMeeting.name,
+      transcriptMoment: item.sourceTimestamp,
+      originalQuote: item.sourceQuote
+    })
+    await actionQueue.enqueue(action, { priority: 'high', dedupKey: `stale:${item.id}` })
+    budget.spend()
+  }
+
+  // P1: High — goal health (KR trajectory check)
+  const goals = await db.goals.find({ orgId: org.id, status: 'active' })
+  for (const goal of goals) {
+    if (!budget.canSpend()) break
+    for (const kr of goal.keyResults) {
+      const expected = linearInterpolation(kr.startValue, kr.targetValue, kr.startDate, kr.dueDate, now)
+      const deviation = (expected - kr.currentValue) / kr.targetValue
+      if (deviation > 0.15) {  // >15% behind trajectory
+        const action = buildGoalAlert(goal, kr, kr.owner, deviation)
+        await actionQueue.enqueue(action, { priority: 'high', dedupKey: `goal:${kr.id}` })
+        budget.spend()
+      }
+    }
+  }
+
+  // P2–P3 continue similarly...
+}</pre>
+          </div>
+        </div>
+
+        <!-- 1.2 Decision Tree -->
+        <div id="loop1-decision" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-orange-400 font-mono text-sm">1.2</span>
+            Decision Tree
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">Once the scanner identifies an item needing attention, it routes through a decision tree to determine the right action type.</p>
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+                              ┌──────────────┐
+                              │  Item Found   │
+                              │  by Scanner   │
+                              └──────┬───────┘
+                                     │
+                              ┌──────▼───────┐
+                              │  Has owner?   │
+                              └──┬────────┬──┘
+                             Yes │        │ No
+                                 │        │
+                          ┌──────▼──┐  ┌──▼───────────┐
+                          │ Check   │  │ Draft         │
+                          │ history │  │ assignment    │
+                          └──┬──────┘  │ recommendation│
+                             │         └───────────────┘
+                      ┌──────▼──────┐
+                      │ Previous    │
+                      │ follow-up   │
+                      │ in last 48h?│
+                      └──┬──────┬───┘
+                     Yes │      │ No
+                         │      │
+                  ┌──────▼──┐  ┌▼─────────────┐
+                  │ Escalate│  │ Follow-up     │
+                  │ to mgr  │  │ type?         │
+                  └─────────┘  └──┬────┬───┬───┘
+                                  │    │   │
+                    ┌─────────────▼┐ ┌─▼─┐ ┌▼──────────┐
+                    │ Stale task   │ │KR │ │ Missed     │
+                    │ → Check-in   │ │off│ │ deadline   │
+                    │   DM         │ │   │ │ → Urgent   │
+                    └──────────────┘ │   │ │   follow-up│
+                                     │   │ └────────────┘
+                               ┌─────▼───┐
+                               │ KR off   │
+                               │ track    │
+                               │ → Goal   │
+                               │   report │
+                               │   to lead│
+                               └──────────┘</pre>
+
+            <h4 class="text-sm font-semibold text-white mb-3 mt-6">Action Types</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div class="card rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="w-2 h-2 rounded-full bg-green-400"></span>
+                  <span class="text-white font-semibold text-sm">Draft Check-in</span>
+                </div>
+                <p class="text-xs text-slate-400">Friendly DM asking for a status update. Used when there's no urgency but the person hasn't reported progress. Tone: casual, helpful.</p>
+              </div>
+              <div class="card rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
+                  <span class="text-white font-semibold text-sm">Follow-up</span>
+                </div>
+                <p class="text-xs text-slate-400">Direct message with specific context about what needs updating. References the original commitment or deadline. Tone: professional, specific.</p>
+              </div>
+              <div class="card rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="w-2 h-2 rounded-full bg-orange-400"></span>
+                  <span class="text-white font-semibold text-sm">Escalation</span>
+                </div>
+                <p class="text-xs text-slate-400">Loops in the owner's manager. Only triggered after a previous follow-up went unanswered for 48h, or for P0 blockers. Tone: factual, no blame.</p>
+              </div>
+              <div class="card rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+                  <span class="text-white font-semibold text-sm">Report</span>
+                </div>
+                <p class="text-xs text-slate-400">Summary report posted to a channel or DM'd to a lead. Aggregates multiple data points into a structured update. Tone: analytical, data-driven.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 1.3 Timing Strategy -->
+        <div id="loop1-timing" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-orange-400 font-mono text-sm">1.3</span>
+            Timing Strategy
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">The proactive loop respects human schedules. Actions are generated at scan time but delivered based on recipient context.</p>
+
+            <h4 class="text-sm font-semibold text-white mb-3">Delivery Windows</h4>
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+Timeline (recipient's local time):
+                                                                              
+  00:00    06:00    09:00    12:00    15:00    18:00    21:00    00:00
+  ├────────┼────────┼────────┼────────┼────────┼────────┼────────┤
+  │ SILENT │ SILENT │◀══ DELIVERY WINDOW ══▶│  QUIET  │ SILENT │
+  │        │        │  Check-ins: 09–10     │  Only   │        │
+  │        │        │  Follow-ups: 10–16    │  P0     │        │
+  │        │        │  Reports: 08–09, 17   │  escal. │        │
+  │        │        │  Escalations: 10–17   │         │        │
+
+Scan runs globally every 5 min
+  └─→ Actions enqueued with deliverAt timestamp per recipient TZ
+  └─→ P0 escalations bypass quiet hours (configurable per org)
+  └─→ Meeting buffer: no delivery 15min before/after calendar events</pre>
+
+            <h4 class="text-sm font-semibold text-white mb-3 mt-6">Multi-Timezone Handling</h4>
+            <p class="text-slate-400 text-sm">Each person in Brev has a <code class="text-orange-300 bg-orange-500/10 px-1.5 py-0.5 rounded text-xs font-mono">timezone</code> field (from Slack profile or manual override). The scanner produces actions immediately but the delivery layer holds them until the recipient's delivery window opens. For cross-timezone escalations (e.g., IC in PST, manager in CET), the action is delivered to the <em>manager's</em> timezone window since they're the decision-maker.</p>
+          </div>
+        </div>
+
+        <!-- 1.4 Context Assembly -->
+        <div id="loop1-context" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-orange-400 font-mono text-sm">1.4</span>
+            Context Assembly
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">Before generating a message, the Operator assembles a rich context packet from Brev's data model. This ensures every outgoing message is specific, actionable, and grounded in real data — never generic.</p>
+            
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+Context Assembly Pipeline:
+
+  ┌─────────────┐     ┌──────────────┐     ┌──────────────────┐
+  │ Trigger Item │────▶│ Entity Graph │────▶│ Context Packet   │
+  │              │     │ Resolution   │     │                  │
+  │ • task.id    │     │              │     │ • person.name    │
+  │ • type       │     │ task → goal  │     │ • person.tz      │
+  │ • priority   │     │ task → owner │     │ • goal.title     │
+  └──────────────┘     │ goal → KRs   │     │ • kr.progress    │
+                       │ owner → team │     │ • kr.target      │
+                       │ team → lead  │     │ • meeting.last   │
+                       │ owner → cal  │     │ • transcript.ref │
+                       └──────────────┘     │ • history[]      │
+                                            │ • tone_hint      │
+                              ┌──────────────┘
+                              ▼
+                       ┌──────────────┐     ┌──────────────────┐
+                       │ LLM Message  │────▶│ Slack Delivery   │
+                       │ Generation   │     │                  │
+                       │              │     │ • DM / channel   │
+                       │ System prompt│     │ • Thread / new   │
+                       │ + context    │     │ • Reactions       │
+                       │ + tone guide │     │ • deliverAt      │
+                       └──────────────┘     └──────────────────┘</pre>
+
+            <h4 class="text-sm font-semibold text-white mb-3 mt-6">Context Packet Schema</h4>
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+interface ContextPacket {
+  trigger: {
+    type: 'blocked_task' | 'missed_deadline' | 'stale_commitment'
+          | 'goal_off_track' | 'metric_anomaly' | 'check_in_due' | 'report_due'
+    item: Task | ActionItem | KeyResult
+    urgency: 'critical' | 'high' | 'medium' | 'low'
+    daysSinceLastActivity: number
+  }
+  recipient: {
+    person: Person          // name, slackId, timezone, role
+    manager?: Person        // for escalations
+    preferences: {          // per-person notification prefs
+      frequency: 'normal' | 'reduced' | 'minimal'
+      channel: 'dm' | 'channel' | 'thread'
+    }
+  }
+  relatedEntities: {
+    goal?: Goal             // parent goal if applicable
+    keyResults?: KeyResult[]// sibling KRs for context
+    team?: Team             // team context
+    cadence?: Cadence       // linked meeting cadence
+    recentMeetings?: Meeting[] // last 3 relevant meetings
+  }
+  history: {
+    previousActions: Action[]  // last 5 Operator actions for this item
+    previousResponses: string[] // user replies to those actions
+    escalationCount: number
+  }
+  tone: 'friendly' | 'professional' | 'urgent' | 'celebratory'
+}</pre>
+          </div>
+        </div>
+
+        <!-- 1.5 Example Walkthrough -->
+        <div id="loop1-example" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-orange-400 font-mono text-sm">1.5</span>
+            Example: Full Planning Cycle (50-Person Company)
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">Let's walk through a complete proactive scan cycle for <strong class="text-white">Acme Corp</strong> — 50 people, 8 teams, 12 active goals, 47 open tasks, 6 weekly cadences.</p>
+
+            <div class="space-y-6">
+              <div class="phase-line">
+                <div class="flex items-start gap-4">
+                  <div class="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0 mt-1">
+                    <span class="text-orange-400 font-mono text-xs font-bold">1</span>
+                  </div>
+                  <div>
+                    <h4 class="text-white font-semibold mb-1">Scan triggers at 09:05 AM UTC (Tuesday)</h4>
+                    <p class="text-sm text-slate-400">Cron fires. Acme's primary timezone is America/New_York (09:05 UTC = 5:05 AM ET). Scanner runs but most actions will be held for delivery at 9 AM ET.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="phase-line">
+                <div class="flex items-start gap-4">
+                  <div class="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0 mt-1">
+                    <span class="text-red-400 font-mono text-xs font-bold">2</span>
+                  </div>
+                  <div>
+                    <h4 class="text-white font-semibold mb-1">P0 Scan: 2 blocked tasks, 1 missed deadline</h4>
+                    <p class="text-sm text-slate-400 mb-2">Task "Migrate auth to SSO" has been blocked for 36h — owner: Jake (Engineering). Previous follow-up sent yesterday, no reply. → <span class="text-orange-400">Escalate to Jake's manager (Maria)</span>.</p>
+                    <p class="text-sm text-slate-400 mb-2">Task "Ship Q1 customer deck" was due yesterday — owner: Lisa (Marketing). No previous follow-up. → <span class="text-yellow-400">Send follow-up DM to Lisa</span>.</p>
+                    <div class="brev-bubble p-3 mt-2">
+                      <p class="text-xs text-slate-500 mb-1">💬 Draft message to Maria (escalation):</p>
+                      <p class="text-sm text-slate-300">"Hi Maria — Jake's task <strong>Migrate auth to SSO</strong> has been blocked for 36 hours and a follow-up yesterday didn't get a response. This is blocking the Q1 Security goal (currently at 45% vs 60% expected). Could you help unblock? The blocker note says: <em>'Waiting on vendor API keys from procurement.'</em>"</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="phase-line">
+                <div class="flex items-start gap-4">
+                  <div class="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0 mt-1">
+                    <span class="text-orange-400 font-mono text-xs font-bold">3</span>
+                  </div>
+                  <div>
+                    <h4 class="text-white font-semibold mb-1">P1 Scan: 4 stale commitments, 1 goal off-track</h4>
+                    <p class="text-sm text-slate-400">From Monday's Product Sync meeting, 3 action items have no updates. From last week's Eng Standup, 1 item is stale. The "Improve NPS to 50" goal has KR "Reduce response time to &lt;4h" at 12% vs 35% expected. → Enqueue 5 follow-ups.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="phase-line">
+                <div class="flex items-start gap-4">
+                  <div class="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center flex-shrink-0 mt-1">
+                    <span class="text-yellow-400 font-mono text-xs font-bold">4</span>
+                  </div>
+                  <div>
+                    <h4 class="text-white font-semibold mb-1">P2 Scan: 1 metric anomaly, 2 upcoming deadlines at risk</h4>
+                    <p class="text-sm text-slate-400">Weekly active users dropped 18% (2.3σ deviation). Two tasks due Thursday are at &lt;30% completion. → Enqueue 3 notifications.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="phase-line">
+                <div class="flex items-start gap-4">
+                  <div class="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-1">
+                    <span class="text-green-400 font-mono text-xs font-bold">5</span>
+                  </div>
+                  <div>
+                    <h4 class="text-white font-semibold mb-1">P3 Scan: 6 people need check-ins, 1 weekly report due</h4>
+                    <p class="text-sm text-slate-400">6 people haven't updated status in &gt;5 days. Monday standup summary for #engineering is due. → Enqueue 7 actions.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex items-start gap-4">
+                  <div class="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 mt-1">
+                    <span class="text-purple-400 font-mono text-xs font-bold">Σ</span>
+                  </div>
+                  <div>
+                    <h4 class="text-white font-semibold mb-1">Cycle Complete: 18 actions enqueued (budget: 20)</h4>
+                    <p class="text-sm text-slate-400">3 critical, 5 high, 3 medium, 7 low. All will be delivered within their recipients' delivery windows. Dedup layer prevented 2 duplicate follow-ups from the previous cycle. Total scan time: 340ms.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== LOOP 2: REACTIVE HANDLING ===== -->
+      <section id="loop2" class="mb-20">
+        <h2 class="text-3xl font-black text-white mb-2 flex items-center gap-3">
+          <span class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400 font-mono text-sm font-bold">L2</span>
+          Reactive Handling
+        </h2>
+        <p class="text-slate-500 mb-8 text-sm">Event-driven · Slack @mentions, reactions, thread replies · Instant response</p>
+
+        <!-- 2.1 Intent Detection -->
+        <div id="loop2-intent" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-purple-400 font-mono text-sm">2.1</span>
+            @Mention Intent Detection
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">When a user @mentions Brev, the message is parsed through a two-stage intent detection pipeline: fast pattern matching for common operations, then LLM fallback for ambiguous requests.</p>
+
+            <h4 class="text-sm font-semibold text-white mb-3">Stage 1: Pattern Matching (< 50ms)</h4>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-slate-400">
+                    <th class="px-4 py-3 rounded-tl-lg">Pattern</th>
+                    <th class="px-4 py-3">Intent</th>
+                    <th class="px-4 py-3">CRUD Op</th>
+                    <th class="px-4 py-3 rounded-tr-lg">Example</th>
+                  </tr>
+                </thead>
+                <tbody class="text-slate-300">
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">assign {thing} to {person}</td>
+                    <td class="px-4 py-3">Assignment</td>
+                    <td class="px-4 py-3"><span class="text-yellow-400">UPDATE</span></td>
+                    <td class="px-4 py-3 text-xs text-slate-400">"@brev assign the NPS goal to Sarah"</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">create {type} {details}</td>
+                    <td class="px-4 py-3">Creation</td>
+                    <td class="px-4 py-3"><span class="text-green-400">CREATE</span></td>
+                    <td class="px-4 py-3 text-xs text-slate-400">"@brev create a task to update the docs"</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">status of {thing}</td>
+                    <td class="px-4 py-3">Query</td>
+                    <td class="px-4 py-3"><span class="text-blue-400">READ</span></td>
+                    <td class="px-4 py-3 text-xs text-slate-400">"@brev status of Q1 revenue goal"</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">update {thing} to {value}</td>
+                    <td class="px-4 py-3">Update</td>
+                    <td class="px-4 py-3"><span class="text-yellow-400">UPDATE</span></td>
+                    <td class="px-4 py-3 text-xs text-slate-400">"@brev update NPS to 47"</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">cancel/remove {thing}</td>
+                    <td class="px-4 py-3">Deletion</td>
+                    <td class="px-4 py-3"><span class="text-red-400">DELETE</span></td>
+                    <td class="px-4 py-3 text-xs text-slate-400">"@brev cancel the migration task"</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">summarize/report {scope}</td>
+                    <td class="px-4 py-3">Report</td>
+                    <td class="px-4 py-3"><span class="text-blue-400">READ</span></td>
+                    <td class="px-4 py-3 text-xs text-slate-400">"@brev summarize this week's progress"</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4 class="text-sm font-semibold text-white mb-3 mt-6">Stage 2: LLM Intent Resolution (< 2s)</h4>
+            <p class="text-slate-400 text-sm mb-3">For messages that don't match Stage 1 patterns, the full message + thread context is sent to the LLM with a structured output schema:</p>
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+// LLM system prompt (abbreviated)
+{
+  role: "system",
+  content: `You are the Brev Operator intent parser. Given a Slack message
+  mentioning @brev, extract the user's intent as a structured operation.
+  
+  Output JSON:
+  {
+    "intent": "create|read|update|delete|assign|report|clarify",
+    "entity_type": "task|goal|key_result|metric|cadence|person",
+    "entity_query": "natural language description to fuzzy-match",
+    "parameters": { ... },  // operation-specific
+    "confidence": 0.0-1.0,
+    "ambiguity_note": "optional explanation if confidence < 0.8"
+  }
+  
+  If confidence < 0.6, set intent to "clarify" and include a suggested
+  clarification question in ambiguity_note.`
+}
+
+// Entity resolution pipeline after LLM:
+//   1. entity_query → fuzzy search against org's entities (trigram + embedding)
+//   2. Top 3 matches returned, best match selected if confidence > 0.85
+//   3. If multiple close matches → ask user to disambiguate
+//   4. Person references resolved via Slack user ID + Brev person DB</pre>
+          </div>
+        </div>
+
+        <!-- 2.2 Reaction-Based Approvals -->
+        <div id="loop2-reactions" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-purple-400 font-mono text-sm">2.2</span>
+            Reaction-Based Approvals
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">When the Operator proposes an action (from any loop), it posts a message with a confirmation prompt. Users respond with emoji reactions to control execution.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div class="card rounded-lg p-4 border-l-4 border-l-green-500">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="text-2xl">✅</span>
+                  <span class="text-white font-semibold">Execute</span>
+                </div>
+                <p class="text-xs text-slate-400">Approve and execute the proposed action immediately. The Operator performs the CRUD operation and confirms completion in-thread.</p>
+                <p class="text-xs text-slate-500 mt-2">Who can: action owner, their manager, org admin</p>
+              </div>
+              <div class="card rounded-lg p-4 border-l-4 border-l-red-500">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="text-2xl">❌</span>
+                  <span class="text-white font-semibold">Dismiss</span>
+                </div>
+                <p class="text-xs text-slate-400">Reject the proposed action. The Operator marks it as dismissed and won't re-propose for this item until state changes. Logged for learning.</p>
+                <p class="text-xs text-slate-500 mt-2">Who can: anyone in the thread</p>
+              </div>
+              <div class="card rounded-lg p-4 border-l-4 border-l-blue-500">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="text-2xl">👀</span>
+                  <span class="text-white font-semibold">Acknowledge</span>
+                </div>
+                <p class="text-xs text-slate-400">Acknowledge without acting. The Operator records the acknowledgment and delays re-prompting by 48 hours. Useful for "I see this, will handle it myself."</p>
+                <p class="text-xs text-slate-500 mt-2">Who can: action owner, their manager</p>
+              </div>
+              <div class="card rounded-lg p-4 border-l-4 border-l-yellow-500">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="text-2xl">🔄</span>
+                  <span class="text-white font-semibold">Retry / Revise</span>
+                </div>
+                <p class="text-xs text-slate-400">Re-run the action with fresh context. Useful when the underlying data has changed since the proposal was made. Operator re-fetches and re-proposes.</p>
+                <p class="text-xs text-slate-500 mt-2">Who can: anyone in the thread</p>
+              </div>
+            </div>
+
+            <h4 class="text-sm font-semibold text-white mb-3">Reaction Processing Pipeline</h4>
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+Slack Event: reaction_added
+  │
+  ├─ Is it on a Brev Operator message?  (check message metadata)
+  │   └─ No → ignore
+  │
+  ├─ Extract: emoji, reactor_user_id, message_ts, channel
+  │
+  ├─ Authorization check:
+  │   └─ Does reactor have permission for this reaction type?
+  │       └─ No → add ⚠️ reaction, reply in thread: "Only {owner} can approve this"
+  │
+  ├─ Map emoji → action:
+  │   ├─ ✅ → execute_proposed_action(message.metadata.action_id)
+  │   ├─ ❌ → dismiss_action(action_id, reason: 'user_rejected')
+  │   ├─ 👀 → acknowledge_action(action_id, snooze: 48h)
+  │   └─ 🔄 → retry_action(action_id, refresh_context: true)
+  │
+  ├─ Execute and confirm:
+  │   └─ Reply in thread with result or error
+  │
+  └─ Update action log with outcome + reactor identity</pre>
+          </div>
+        </div>
+
+        <!-- 2.3 Thread Reply Routing -->
+        <div id="loop2-threads" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-purple-400 font-mono text-sm">2.3</span>
+            Thread Reply Routing
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">When a user replies in a thread that the Operator is participating in, the reply is routed back to the correct context — whether it's answering a check-in, providing a status update, or responding to a clarification request.</p>
+
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+Thread Reply Routing:
+
+  User replies in Brev thread
+    │
+    ├─ Lookup thread_ts → find originating action
+    │   │
+    │   ├─ Action type: CHECK_IN
+    │   │   └─ Parse reply as status update
+    │   │       ├─ Extract: progress %, blockers, timeline
+    │   │       ├─ Update task/KR in Brev data model
+    │   │       └─ Reply: "Got it! Updated {task} to {status}. ✅"
+    │   │
+    │   ├─ Action type: FOLLOW_UP
+    │   │   └─ Parse reply as response to follow-up
+    │   │       ├─ If contains update → apply update, clear follow-up timer
+    │   │       ├─ If asks for help → route to manager or relevant person
+    │   │       └─ If defers → set snooze, schedule re-follow-up
+    │   │
+    │   ├─ Action type: CLARIFICATION
+    │   │   └─ Feed reply back into intent parser (Stage 2)
+    │   │       ├─ If now confident → execute resolved intent
+    │   │       └─ If still ambiguous → ask more specific question
+    │   │
+    │   ├─ Action type: PROPOSAL
+    │   │   └─ Parse reply as approval/modification
+    │   │       ├─ "yes" / "do it" / "approved" → execute
+    │   │       ├─ "no" / "skip" / "not now" → dismiss
+    │   │       └─ Other → treat as modification, re-propose
+    │   │
+    │   └─ Action type: REPORT
+    │       └─ Parse reply as follow-up question
+    │           └─ Generate additional analysis and reply in thread
+    │
+    └─ No originating action found
+        └─ Treat as new @mention (enter intent detection pipeline)</pre>
+          </div>
+        </div>
+
+        <!-- 2.4 Error Handling -->
+        <div id="loop2-errors" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-purple-400 font-mono text-sm">2.4</span>
+            Error Handling
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">When the Operator misunderstands intent or can't execute an action, it fails gracefully with clear communication and easy recovery paths.</p>
+
+            <div class="space-y-4">
+              <div class="card rounded-lg p-4">
+                <h4 class="text-white font-semibold text-sm mb-2">Entity Not Found</h4>
+                <div class="slack-bubble p-3 mb-2">
+                  <p class="text-xs text-slate-500 mb-1">👤 User:</p>
+                  <p class="text-sm text-slate-300">"@brev assign the onboarding task to Mike"</p>
+                </div>
+                <div class="brev-bubble p-3">
+                  <p class="text-xs text-slate-500 mb-1">🤖 Brev:</p>
+                  <p class="text-sm text-slate-300">"I found 3 tasks with 'onboarding' in the name. Which one did you mean?<br>
+                  1️⃣ <strong>Onboarding flow redesign</strong> (Design team, due Mar 28)<br>
+                  2️⃣ <strong>Update onboarding docs</strong> (Eng team, due Apr 2)<br>
+                  3️⃣ <strong>New hire onboarding checklist</strong> (HR team, no due date)<br><br>
+                  Reply with the number, or say 'none' if I'm off."</p>
+                </div>
+              </div>
+
+              <div class="card rounded-lg p-4">
+                <h4 class="text-white font-semibold text-sm mb-2">Ambiguous Intent (confidence < 0.6)</h4>
+                <div class="slack-bubble p-3 mb-2">
+                  <p class="text-xs text-slate-500 mb-1">👤 User:</p>
+                  <p class="text-sm text-slate-300">"@brev deal with the revenue thing"</p>
+                </div>
+                <div class="brev-bubble p-3">
+                  <p class="text-xs text-slate-500 mb-1">🤖 Brev:</p>
+                  <p class="text-sm text-slate-300">"I want to help but I'm not sure what you need. Did you mean:<br>
+                  • 📊 <strong>Check status</strong> of the Q1 Revenue goal (currently 72% → target 85%)?<br>
+                  • 📝 <strong>Update</strong> the MRR metric?<br>
+                  • 👤 <strong>Assign</strong> someone to a revenue-related task?<br><br>
+                  Or just tell me more specifically what you need."</p>
+                </div>
+              </div>
+
+              <div class="card rounded-lg p-4">
+                <h4 class="text-white font-semibold text-sm mb-2">Permission Denied</h4>
+                <p class="text-xs text-slate-400">If a user tries to modify an entity they don't own and aren't a manager/admin for, the Operator explains the restriction and offers to route the request to the appropriate person.</p>
+              </div>
+
+              <div class="card rounded-lg p-4">
+                <h4 class="text-white font-semibold text-sm mb-2">Execution Failure</h4>
+                <p class="text-xs text-slate-400">If the CRUD operation fails (API error, validation error, conflict), the Operator explains what happened, what it tried, and suggests a retry or manual action. All failures are logged with full context for debugging.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2.5 Example Walkthrough -->
+        <div id="loop2-example" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-purple-400 font-mono text-sm">2.5</span>
+            Example: "@brev assign the NPS goal to Sarah"
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">End-to-end walkthrough of a reactive assignment operation.</p>
+
+            <div class="space-y-4">
+              <div class="flex items-start gap-3">
+                <div class="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span class="text-xs text-white font-bold">1</span>
+                </div>
+                <div class="flex-1">
+                  <p class="text-sm text-white font-semibold">Slack event received</p>
+                  <pre class="arch-diagram rounded-lg p-3 text-xs leading-relaxed text-slate-400 mt-1">
+event: message
+channel: #product
+user: U0ALEX (Alex, Product Lead)
+text: "@brev assign the NPS goal to Sarah"
+ts: 1711036800.001</pre>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3">
+                <div class="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span class="text-xs text-white font-bold">2</span>
+                </div>
+                <div class="flex-1">
+                  <p class="text-sm text-white font-semibold">Stage 1: Pattern match — HIT</p>
+                  <p class="text-xs text-slate-400 mt-1">Pattern <code class="text-orange-300 bg-orange-500/10 px-1 rounded font-mono">assign {thing} to {person}</code> matches.<br>
+                  → thing: "the NPS goal" → entity_type: goal, query: "NPS"<br>
+                  → person: "Sarah" → resolve via Slack user directory</p>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3">
+                <div class="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span class="text-xs text-white font-bold">3</span>
+                </div>
+                <div class="flex-1">
+                  <p class="text-sm text-white font-semibold">Entity resolution</p>
+                  <p class="text-xs text-slate-400 mt-1">Fuzzy search "NPS" against goals → <strong>1 match</strong>: "Improve NPS to 50" (id: goal_8f2a). Confidence: 0.96.<br>
+                  Person lookup "Sarah" → <strong>1 match</strong>: Sarah Chen (U0SARAH), Customer Success team. Confidence: 0.99.</p>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3">
+                <div class="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span class="text-xs text-white font-bold">4</span>
+                </div>
+                <div class="flex-1">
+                  <p class="text-sm text-white font-semibold">Authorization check</p>
+                  <p class="text-xs text-slate-400 mt-1">Alex (requester) is Product Lead → has permission to assign goals. Sarah is in the org → valid assignee. Current owner: unassigned. → Authorized.</p>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3">
+                <div class="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span class="text-xs text-white font-bold">5</span>
+                </div>
+                <div class="flex-1">
+                  <p class="text-sm text-white font-semibold">Propose action (in-thread)</p>
+                  <div class="brev-bubble p-3 mt-1">
+                    <p class="text-sm text-slate-300">"I'll assign <strong>Improve NPS to 50</strong> to <strong>Sarah Chen</strong>. This goal has 3 key results and is currently at 34% overall progress.<br><br>React ✅ to confirm, or ❌ to cancel."</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3">
+                <div class="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span class="text-xs text-white font-bold">6</span>
+                </div>
+                <div class="flex-1">
+                  <p class="text-sm text-white font-semibold">Alex reacts ✅</p>
+                  <p class="text-xs text-slate-400 mt-1">Reaction received → authorization passes → execute UPDATE on goal_8f2a: set owner = U0SARAH.</p>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3">
+                <div class="w-6 h-6 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span class="text-xs text-white font-bold">✓</span>
+                </div>
+                <div class="flex-1">
+                  <p class="text-sm text-white font-semibold">Confirmation + notification</p>
+                  <div class="brev-bubble p-3 mt-1">
+                    <p class="text-sm text-slate-300">"Done! ✅ <strong>Improve NPS to 50</strong> is now assigned to Sarah Chen. I've also DM'd Sarah to let her know."</p>
+                  </div>
+                  <p class="text-xs text-slate-500 mt-2">Simultaneously, a DM is sent to Sarah: "Hi Sarah! Alex just assigned you as the owner of <strong>Improve NPS to 50</strong>. It has 3 key results — current progress is 34%. Let me know if you have questions!"</p>
+                  <p class="text-xs text-slate-500 mt-1">Total time: 1.2s (pattern match) + user reaction time + 0.8s (execution) = ~2s of Operator time.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== LOOP 3: CADENCE LIFECYCLE ===== -->
+      <section id="loop3" class="mb-20">
+        <h2 class="text-3xl font-black text-white mb-2 flex items-center gap-3">
+          <span class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-mono text-sm font-bold">L3</span>
+          Cadence Lifecycle
+        </h2>
+        <p class="text-slate-500 mb-8 text-sm">Meeting-driven · Calendar-synced · Transcript-integrated · Continuous commitment tracking</p>
+
+        <!-- 3.1 Pre-Meeting -->
+        <div id="loop3-pre" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-emerald-400 font-mono text-sm">3.1</span>
+            Pre-Meeting: Agenda Generation
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">30 minutes before a scheduled cadence meeting, the Operator generates a data-driven agenda and posts it to the meeting's Slack channel.</p>
+
+            <h4 class="text-sm font-semibold text-white mb-3">Agenda Generation Algorithm</h4>
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+function generateAgenda(cadence: Cadence, meeting: Meeting): Agenda {
+  const sections: AgendaSection[] = []
+  const attendees = meeting.attendees
+  const lastMeeting = cadence.previousMeeting
+  const timeSince = now.diff(lastMeeting.endTime)
+
+  // Section 1: CARRY-OVER ITEMS (highest priority)
+  // Items from last meeting that are still open
+  const carryOver = await db.actionItems.find({
+    cadenceId: cadence.id,
+    status: { $in: ['open', 'in_progress', 'blocked'] },
+    createdBefore: lastMeeting.endTime
+  })
+  if (carryOver.length > 0) {
+    sections.push({
+      title: '🔄 Carry-Over Items',
+      priority: 1,
+      items: carryOver.map(item => ({
+        text: item.title,
+        owner: item.owner.name,
+        status: item.status,
+        daysSinceCreated: now.diff(item.createdAt, 'days'),
+        context: item.lastUpdate || 'No updates since last meeting'
+      }))
+    })
+  }
+
+  // Section 2: GOAL & METRIC UPDATES
+  // Pull latest data for goals/KRs relevant to this cadence's attendees
+  const relevantGoals = await db.goals.find({
+    ownerId: { $in: attendees.map(a => a.id) },
+    status: 'active'
+  })
+  const goalUpdates = relevantGoals.map(goal => ({
+    title: goal.title,
+    progress: goal.overallProgress,
+    trend: calculateTrend(goal, timeSince),  // improving/declining/flat
+    keyHighlight: getMostNoteworthyKR(goal)  // biggest change since last meeting
+  }))
+  sections.push({
+    title: '📊 Goal & Metric Updates',
+    priority: 2,
+    items: goalUpdates.sort((a, b) => urgencyScore(b) - urgencyScore(a))
+  })
+
+  // Section 3: RISKS & BLOCKERS
+  // Anything flagged by the proactive loop since last meeting
+  const risks = await db.actions.find({
+    type: { $in: ['escalation', 'blocker_alert'] },
+    createdAfter: lastMeeting.endTime,
+    relatedTo: { $in: attendees.map(a => a.teamId) }
+  })
+  if (risks.length > 0) {
+    sections.push({
+      title: '⚠️ Risks & Blockers',
+      priority: 3,
+      items: risks
+    })
+  }
+
+  // Section 4: NEW BUSINESS
+  // Topics suggested by team members (via @brev add to agenda)
+  const suggestions = await db.agendaItems.find({
+    cadenceId: cadence.id,
+    meetingId: meeting.id,
+    source: 'user_suggestion'
+  })
+  sections.push({
+    title: '💡 New Business',
+    priority: 4,
+    items: suggestions
+  })
+
+  // Section 5: TIME-BOXED by attendee count
+  // Auto-allocate time per section based on meeting duration
+  const totalMinutes = meeting.durationMinutes
+  return allocateTime(sections, totalMinutes, attendees.length)
+}</pre>
+
+            <h4 class="text-sm font-semibold text-white mb-3 mt-6">Example Agenda Output</h4>
+            <div class="brev-bubble p-4">
+              <p class="text-xs text-slate-500 mb-2">📋 Posted to #weekly-business-review 30 min before meeting:</p>
+              <div class="text-sm text-slate-300 space-y-3">
+                <p class="font-semibold text-white">📅 Weekly Business Review — Wed Mar 18, 2:00 PM ET</p>
+                <div>
+                  <p class="font-semibold text-orange-400">🔄 Carry-Over Items (10 min)</p>
+                  <p>• <strong>API rate limiting fix</strong> — @Jake — Blocked (5 days) — <em>waiting on vendor keys</em></p>
+                  <p>• <strong>Q1 customer deck</strong> — @Lisa — In Progress — <em>draft ready, needs review</em></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-orange-400">📊 Goal Updates (15 min)</p>
+                  <p>• <strong>Improve NPS to 50</strong> — 34% → target 50 — <span class="text-red-400">⬇ declining</span> — <em>Response time KR at 12% (expected 35%)</em></p>
+                  <p>• <strong>Q1 Revenue $2M</strong> — 78% → target 100% — <span class="text-green-400">⬆ on track</span></p>
+                  <p>• <strong>Ship v2.0</strong> — 65% → target 100% — <span class="text-yellow-400">→ flat</span> — <em>3 tasks blocked</em></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-orange-400">⚠️ Risks (5 min)</p>
+                  <p>• WAU dropped 18% this week (2.3σ anomaly)</p>
+                </div>
+                <div>
+                  <p class="font-semibold text-orange-400">💡 New Business (10 min)</p>
+                  <p>• @Sarah: Discuss new competitor launch</p>
+                  <p>• @Mike: Headcount request for Q2</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3.2 During Meeting -->
+        <div id="loop3-during" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-emerald-400 font-mono text-sm">3.2</span>
+            During Meeting: Real-Time Action Item Extraction
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">Brev already has real-time meeting transcription and action item extraction. The Operator hooks into this existing pipeline to capture commitments as they happen.</p>
+
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+Existing Brev Meeting Pipeline:
+
+  Audio Stream → Whisper Transcription → Diarization (who said what)
+        │
+        ▼
+  Real-time Transcript
+        │
+        ├─── [EXISTING] Action Item Detector
+        │       │
+        │       ▼
+        │    Extracted Items:
+        │    • "Jake will have the API keys by Friday"
+        │    •  "Sarah to draft the competitive analysis"
+        │    •  "Let's revisit the pricing model next week"
+        │
+        └─── [NEW: OPERATOR HOOK]
+                │
+                ▼
+         Enrichment Layer:
+         • Resolve "Jake" → Person (Jake Martinez, U0JAKE)
+         • Resolve "Friday" → 2026-03-20
+         • Resolve "API keys" → link to task "Migrate auth to SSO"
+         • Resolve "next week" → add to next cadence meeting agenda
+         • Classify: commitment vs. discussion-item vs. decision
+         • Assign confidence score per extraction</pre>
+
+            <h4 class="text-sm font-semibold text-white mb-3 mt-6">Commitment Classification</h4>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-slate-400">
+                    <th class="px-4 py-3 rounded-tl-lg">Type</th>
+                    <th class="px-4 py-3">Signal</th>
+                    <th class="px-4 py-3">Example</th>
+                    <th class="px-4 py-3 rounded-tr-lg">Operator Action</th>
+                  </tr>
+                </thead>
+                <tbody class="text-slate-300">
+                  <tr>
+                    <td class="px-4 py-3"><span class="text-green-400 font-semibold">Commitment</span></td>
+                    <td class="px-4 py-3 text-xs">"I will…", "I'll handle…", "{name} to…"</td>
+                    <td class="px-4 py-3 text-xs">"Jake will have the API keys by Friday"</td>
+                    <td class="px-4 py-3 text-xs">Create task, assign owner, set deadline</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3"><span class="text-blue-400 font-semibold">Decision</span></td>
+                    <td class="px-4 py-3 text-xs">"We decided…", "Let's go with…", "Agreed"</td>
+                    <td class="px-4 py-3 text-xs">"We're going with option B for pricing"</td>
+                    <td class="px-4 py-3 text-xs">Log decision, link to agenda item</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3"><span class="text-yellow-400 font-semibold">Discussion</span></td>
+                    <td class="px-4 py-3 text-xs">"Let's revisit…", "We should think about…"</td>
+                    <td class="px-4 py-3 text-xs">"Let's revisit the pricing model next week"</td>
+                    <td class="px-4 py-3 text-xs">Add to next meeting's agenda</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3"><span class="text-purple-400 font-semibold">Question</span></td>
+                    <td class="px-4 py-3 text-xs">"Can someone find out…", "We need to know…"</td>
+                    <td class="px-4 py-3 text-xs">"Can someone get the latest CAC numbers?"</td>
+                    <td class="px-4 py-3 text-xs">Create task with "research" type, suggest owner</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3.3 Post-Meeting -->
+        <div id="loop3-post" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-emerald-400 font-mono text-sm">3.3</span>
+            Post-Meeting: Task Creation & Assignment
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">Within 5 minutes of meeting end, the Operator posts a structured summary and creates draft tasks for all commitments detected.</p>
+
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+Post-Meeting Pipeline (T+0 to T+5 min):
+
+  Meeting ends
+    │
+    ├─ [T+0] Final transcript processing
+    │   └─ Last-pass extraction catches items from final minutes
+    │
+    ├─ [T+1] Deduplication & merge
+    │   └─ Combine items mentioned multiple times
+    │   └─ Merge with carry-over items that got discussed
+    │
+    ├─ [T+2] Owner resolution
+    │   │
+    │   ├─ Explicit: "Jake will…" → owner = Jake ✓
+    │   ├─ Implicit: topic about auth → auth team lead → Jake ✓
+    │   └─ Unassigned: "someone should…" → flag for manual assignment
+    │
+    ├─ [T+2] Deadline inference
+    │   │
+    │   ├─ Explicit: "by Friday" → 2026-03-20 ✓
+    │   ├─ Relative: "next week" → Monday 2026-03-23 ✓
+    │   ├─ Cadence-linked: "before next standup" → next meeting date ✓
+    │   └─ None stated: default = next cadence meeting - 1 day
+    │
+    ├─ [T+3] Draft task creation in Brev
+    │   └─ Status: 'proposed' (not 'active' until approved)
+    │   └─ Source: meeting transcript with timestamp reference
+    │
+    ├─ [T+4] Summary generation
+    │
+    └─ [T+5] Post to Slack channel</pre>
+
+            <h4 class="text-sm font-semibold text-white mb-3 mt-6">Example Post-Meeting Summary</h4>
+            <div class="brev-bubble p-4">
+              <p class="text-xs text-slate-500 mb-2">📝 Posted to #weekly-business-review:</p>
+              <div class="text-sm text-slate-300 space-y-3">
+                <p class="font-semibold text-white">📋 Meeting Summary — Weekly Business Review (Mar 18)</p>
+                <div>
+                  <p class="font-semibold text-green-400">✅ Commitments (react ✅ to approve each)</p>
+                  <p>1. <strong>Get vendor API keys from procurement</strong> — @Jake — Due: Fri Mar 20<br>
+                  <span class="text-xs text-slate-500">📎 from transcript at 14:12 — "I'll escalate directly to procurement and have them by Friday"</span></p>
+                  <p>2. <strong>Draft competitive analysis</strong> — @Sarah — Due: Mon Mar 23<br>
+                  <span class="text-xs text-slate-500">📎 from transcript at 14:28 — "I can have a first draft by next Monday"</span></p>
+                  <p>3. <strong>Pull latest CAC numbers</strong> — <span class="text-yellow-400">unassigned</span> — Due: Wed Mar 25<br>
+                  <span class="text-xs text-slate-500">📎 from transcript at 14:35 — "Can someone get the latest CAC numbers?"</span></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-blue-400">📌 Decisions</p>
+                  <p>• Going with option B for pricing tier restructure</p>
+                  <p>• Delaying v2.0 launch by 1 week (new target: Apr 7)</p>
+                </div>
+                <div>
+                  <p class="font-semibold text-purple-400">📅 Carry to Next Meeting</p>
+                  <p>• Revisit pricing model with updated competitive data</p>
+                  <p>• Review Q2 headcount requests</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3.4 Between Meetings -->
+        <div id="loop3-between" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-emerald-400 font-mono text-sm">3.4</span>
+            Between Meetings: Commitment Tracking
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">The Operator doesn't just extract action items — it <em>follows through</em>. Between meetings, it tracks every commitment and sends contextual follow-ups that reference the specific moment in the transcript where the commitment was made.</p>
+
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+Between-Meeting Timeline:
+
+  Meeting ends (Wed 2:40 PM)
+    │
+    ├─ [Wed 2:45 PM] Summary posted, draft tasks created
+    │
+    ├─ [Wed 3:00 PM] Approved tasks move to 'active' status
+    │   └─ Proactive loop (L1) now tracks them
+    │
+    ├─ [Thu 10:00 AM] First check-in cycle
+    │   └─ For items due Fri: "Hey Jake, quick check on the
+    │      vendor API keys you committed to in Wednesday's
+    │      review (you said you'd escalate to procurement).
+    │      Still on track for Friday?"
+    │
+    ├─ [Fri 9:00 AM] Deadline day check
+    │   └─ If no update: "Jake, the API keys are due today
+    │      per your commitment in Wednesday's business review.
+    │      What's the status?"
+    │
+    ├─ [Fri 5:00 PM] Deadline passed
+    │   └─ If not completed: mark overdue, escalate per L1 rules
+    │
+    └─ [Next Wed 1:30 PM] Pre-meeting agenda includes status
+        └─ "🔄 Carry-Over: API keys — @Jake — OVERDUE (was due Fri)"</pre>
+
+            <h4 class="text-sm font-semibold text-white mb-3 mt-6">Contextual Follow-Up Example</h4>
+            <div class="brev-bubble p-4">
+              <p class="text-xs text-slate-500 mb-1">DM to Jake (Thursday 10:00 AM):</p>
+              <p class="text-sm text-slate-300">"Hey Jake 👋 Quick check-in on the <strong>vendor API keys from procurement</strong> — you mentioned in <a href="#" class="text-orange-400 hover:underline">Wednesday's Business Review</a> that you'd escalate directly and have them by Friday.<br><br>How's that looking? Any blockers I can help flag?<br><br><span class="text-xs text-slate-500">Reply here with an update and I'll track it automatically.</span>"</p>
+            </div>
+            <p class="text-xs text-slate-500 mt-3">The transcript link takes Jake directly to the moment in the meeting where he made the commitment (at 14:12), providing full context without him having to remember exactly what was discussed.</p>
+          </div>
+        </div>
+
+        <!-- 3.5 Example Walkthrough -->
+        <div id="loop3-example" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-emerald-400 font-mono text-sm">3.5</span>
+            Example: Weekly Business Review Cadence (End-to-End)
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">A complete lifecycle of one cadence iteration — from pre-meeting through to the next meeting.</p>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-slate-400">
+                    <th class="px-4 py-3 rounded-tl-lg">Time</th>
+                    <th class="px-4 py-3">Phase</th>
+                    <th class="px-4 py-3">Operator Action</th>
+                    <th class="px-4 py-3 rounded-tr-lg">Channel</th>
+                  </tr>
+                </thead>
+                <tbody class="text-slate-300">
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">Wed 1:30 PM</td>
+                    <td class="px-4 py-3"><span class="text-emerald-400">Pre</span></td>
+                    <td class="px-4 py-3 text-xs">Generate and post agenda with carry-over items, goal updates, risks</td>
+                    <td class="px-4 py-3 text-xs">#weekly-review</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">Wed 1:55 PM</td>
+                    <td class="px-4 py-3"><span class="text-emerald-400">Pre</span></td>
+                    <td class="px-4 py-3 text-xs">5-min reminder with final agenda updates</td>
+                    <td class="px-4 py-3 text-xs">#weekly-review</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">Wed 2:00 PM</td>
+                    <td class="px-4 py-3"><span class="text-blue-400">During</span></td>
+                    <td class="px-4 py-3 text-xs">Meeting starts — transcript pipeline active, extracting in real-time</td>
+                    <td class="px-4 py-3 text-xs">—</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">Wed 2:40 PM</td>
+                    <td class="px-4 py-3"><span class="text-blue-400">During</span></td>
+                    <td class="px-4 py-3 text-xs">Meeting ends — final extraction pass</td>
+                    <td class="px-4 py-3 text-xs">—</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">Wed 2:45 PM</td>
+                    <td class="px-4 py-3"><span class="text-yellow-400">Post</span></td>
+                    <td class="px-4 py-3 text-xs">Post summary with commitments, decisions, carry-forward items</td>
+                    <td class="px-4 py-3 text-xs">#weekly-review</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">Wed 3:00 PM</td>
+                    <td class="px-4 py-3"><span class="text-yellow-400">Post</span></td>
+                    <td class="px-4 py-3 text-xs">Team reacts ✅ to approve tasks — tasks move to active</td>
+                    <td class="px-4 py-3 text-xs">#weekly-review</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">Thu 10:00 AM</td>
+                    <td class="px-4 py-3"><span class="text-purple-400">Between</span></td>
+                    <td class="px-4 py-3 text-xs">Check-in DMs to owners of items due within 48h</td>
+                    <td class="px-4 py-3 text-xs">DMs</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">Fri 9:00 AM</td>
+                    <td class="px-4 py-3"><span class="text-purple-400">Between</span></td>
+                    <td class="px-4 py-3 text-xs">Deadline-day reminders for Friday items</td>
+                    <td class="px-4 py-3 text-xs">DMs</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">Mon 9:00 AM</td>
+                    <td class="px-4 py-3"><span class="text-purple-400">Between</span></td>
+                    <td class="px-4 py-3 text-xs">Follow-ups for overdue items, check-ins for Mon-due items</td>
+                    <td class="px-4 py-3 text-xs">DMs</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">Tue 5:00 PM</td>
+                    <td class="px-4 py-3"><span class="text-purple-400">Between</span></td>
+                    <td class="px-4 py-3 text-xs">Pre-review check: flag any items that need escalation before meeting</td>
+                    <td class="px-4 py-3 text-xs">DM to lead</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-mono text-xs text-orange-300">Wed 1:30 PM</td>
+                    <td class="px-4 py-3"><span class="text-emerald-400">Pre (next)</span></td>
+                    <td class="px-4 py-3 text-xs">New agenda generated — cycle repeats</td>
+                    <td class="px-4 py-3 text-xs">#weekly-review</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== CROSS-LOOP COORDINATION ===== -->
+      <section id="cross-loop" class="mb-20">
+        <h2 class="text-3xl font-black text-white mb-2 flex items-center gap-3">
+          <span class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 font-mono text-sm font-bold">X</span>
+          Cross-Loop Coordination
+        </h2>
+        <p class="text-slate-500 mb-8 text-sm">How the three loops interact, share state, and avoid conflicts</p>
+
+        <div class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-blue-400 font-mono text-sm">X.1</span>
+            Loop Interaction Patterns
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">The loops are not isolated — they constantly feed into each other. Here are the primary interaction patterns:</p>
+
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+Cross-Loop Data Flow:
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │                                                             │
+  │  L3 (Cadence) ──creates──▶ Action Items ──tracked by──▶ L1 │
+  │       │                                                  │  │
+  │       │                   ┌──────────────┐               │  │
+  │       └──agenda refs──▶   │ Shared State │  ◀──scans─────┘  │
+  │                           │    Store     │                  │
+  │  L1 (Proactive) ──────▶  │              │  ◀──writes── L2  │
+  │       │                   └──────────────┘               │  │
+  │       │                                                  │  │
+  │       └──sends follow-up──▶ Slack DM ──reply──▶ L2 handles  │
+  │                                                             │
+  └─────────────────────────────────────────────────────────────┘
+
+Interaction Examples:
+
+  1. L3 → L1: Meeting produces commitment → L1 proactive loop tracks it
+     "Jake will get API keys by Friday" → L1 monitors, follows up Thu/Fri
+
+  2. L1 → L2: Proactive follow-up → user replies → reactive handler
+     L1 sends check-in DM → Jake replies "blocked on procurement" →
+     L2 parses reply, updates task status to 'blocked', triggers L1 escalation
+
+  3. L2 → L3: User adds agenda item → next meeting agenda
+     "@brev add pricing discussion to next review" →
+     L3 includes it in next pre-meeting agenda
+
+  4. L1 → L3: Proactive scan finds risk → added to next agenda
+     L1 detects metric anomaly → L3 includes in "Risks & Blockers" section
+
+  5. L3 → L2: Post-meeting summary → team reacts → reactive approval
+     L3 posts commitments → team member reacts ✅ → L2 processes approval</pre>
+          </div>
+        </div>
+
+        <!-- State Machine -->
+        <div id="state-machine" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-blue-400 font-mono text-sm">X.2</span>
+            Task Lifecycle State Machine
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">Every task/action item in the system follows a unified state machine. All three loops read and write to these states.</p>
+
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+                              ┌───────────┐
+                              │ PROPOSED  │ ◀── L3 extracts from meeting
+                              │           │ ◀── L2 creates from @mention
+                              └─────┬─────┘ ◀── L1 suggests assignment
+                                    │
+                          ✅ react  │  ❌ react
+                          or "yes"  │  or "no"
+                                    │
+                     ┌──────────────┼──────────────┐
+                     ▼              │              ▼
+              ┌───────────┐        │       ┌────────────┐
+              │ APPROVED  │        │       │ DISMISSED  │ (terminal)
+              └─────┬─────┘        │       └────────────┘
+                    │              │
+                    │ auto         │
+                    ▼              │
+              ┌───────────┐       │
+              │  RUNNING  │ ◀─────┘ (auto-approve for high-confidence items)
+              └──┬────┬───┘
+                 │    │
+      blocker    │    │ completed
+      reported   │    │
+                 ▼    ▼
+          ┌──────────┐  ┌───────────┐
+          │ BLOCKED  │  │ COMPLETED │ (terminal)
+          └────┬─────┘  └───────────┘
+               │
+               │ unblocked (L2 reply or manual)
+               ▼
+          ┌───────────┐     ┌──────────┐
+          │  RUNNING  │────▶│  FAILED  │ (terminal, can retry → RUNNING)
+          └───────────┘     └──────────┘
+
+State Transition Rules:
+  • PROPOSED → APPROVED:  Only via human approval (✅ react or text)
+  • PROPOSED → RUNNING:   Auto-approve if confidence > 0.95 AND org allows
+  • APPROVED → RUNNING:   Automatic (no delay)
+  • RUNNING → BLOCKED:    Owner reports blocker (via DM reply or @mention)
+  • RUNNING → COMPLETED:  Owner confirms done, or metric target reached
+  • RUNNING → FAILED:     Deadline passed + escalation exhausted
+  • BLOCKED → RUNNING:    Blocker resolved (manual or via L2 update)
+  • Any → DISMISSED:      ❌ reaction at any non-terminal state
+  
+Lock semantics:
+  • Each transition acquires an optimistic lock on the task
+  • If two loops try to transition simultaneously, last-write-wins
+  • All transitions are logged in the action_history table</pre>
+          </div>
+        </div>
+
+        <!-- Conflict Resolution -->
+        <div id="conflicts" class="mb-10">
+          <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span class="text-blue-400 font-mono text-sm">X.3</span>
+            Conflict Resolution
+          </h3>
+          <div class="card rounded-xl p-6">
+            <p class="text-slate-400 mb-4">When multiple loops attempt to act on the same item, the system uses these conflict resolution strategies:</p>
+
+            <div class="space-y-4">
+              <div class="card rounded-lg p-4 border-l-4 border-l-orange-500">
+                <h4 class="text-white font-semibold text-sm mb-2">Conflict: Duplicate Actions</h4>
+                <p class="text-xs text-slate-400 mb-2"><strong>Scenario:</strong> L1 proactive scan generates a follow-up for a stale task at the same time L3 is generating a pre-meeting agenda that includes the same stale task.</p>
+                <p class="text-xs text-slate-400"><strong>Resolution:</strong> Action deduplication layer. Every action has a <code class="text-orange-300 bg-orange-500/10 px-1 rounded font-mono">dedupKey</code> derived from (entity_id + action_type + time_window). If two actions have the same dedupKey within 4 hours, the higher-priority one wins and the other is suppressed. Suppressed actions are logged but not delivered.</p>
+              </div>
+
+              <div class="card rounded-lg p-4 border-l-4 border-l-purple-500">
+                <h4 class="text-white font-semibold text-sm mb-2">Conflict: Race Condition on State</h4>
+                <p class="text-xs text-slate-400 mb-2"><strong>Scenario:</strong> L2 processes a user's reply ("it's done") and starts transitioning task to COMPLETED, while L1's scan (running concurrently) sees it as still RUNNING and enqueues a follow-up.</p>
+                <p class="text-xs text-slate-400"><strong>Resolution:</strong> Optimistic locking with version numbers. Each task has a <code class="text-orange-300 bg-orange-500/10 px-1 rounded font-mono">version</code> field. Transitions check version before writing. If L2 completes first (version 5 → 6), L1's follow-up action sees version mismatch at delivery time and is silently dropped. All state reads at delivery time, not enqueue time.</p>
+              </div>
+
+              <div class="card rounded-lg p-4 border-l-4 border-l-emerald-500">
+                <h4 class="text-white font-semibold text-sm mb-2">Conflict: Contradictory Actions</h4>
+                <p class="text-xs text-slate-400 mb-2"><strong>Scenario:</strong> L1 wants to escalate a blocked task to the manager. Meanwhile, the IC replied in the thread (L2) saying "unblocked, working on it now." L1 escalation is already in the queue.</p>
+                <p class="text-xs text-slate-400"><strong>Resolution:</strong> Delivery-time state validation. Before any action is delivered, the delivery layer re-checks the entity's current state. If the state no longer matches the action's preconditions (e.g., task is no longer blocked), the action is cancelled with reason <code class="text-orange-300 bg-orange-500/10 px-1 rounded font-mono">precondition_stale</code>.</p>
+              </div>
+
+              <div class="card rounded-lg p-4 border-l-4 border-l-blue-500">
+                <h4 class="text-white font-semibold text-sm mb-2">Conflict: Message Flooding</h4>
+                <p class="text-xs text-slate-400 mb-2"><strong>Scenario:</strong> Multiple loops generate messages to the same person in a short window — creating an annoying burst of notifications.</p>
+                <p class="text-xs text-slate-400"><strong>Resolution:</strong> Per-person rate limiter. Max 3 Operator messages per person per hour (configurable per org). If limit is hit, lower-priority messages are batched into a single digest delivered at the next available slot. P0 escalations bypass the rate limit but still count toward the budget.</p>
+              </div>
+            </div>
+
+            <h4 class="text-sm font-semibold text-white mb-3 mt-6">Priority Hierarchy (When Loops Conflict)</h4>
+            <pre class="arch-diagram rounded-lg p-5 text-xs leading-relaxed text-slate-400">
+Priority (highest to lowest):
+
+  1. L2 Reactive — User-initiated actions always win
+     Rationale: Human just asked for something → do it now
+
+  2. L3 Cadence — Meeting-driven actions take precedence
+     Rationale: Team is actively in a meeting → context is fresh
+
+  3. L1 Proactive — Background scanning is lowest priority
+     Rationale: Can always wait for the next cycle
+
+Exception: L1 P0 escalations (blocked > 24h, missed critical deadlines)
+  → These jump to priority 1.5 (above cadence, below reactive)</pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer class="border-t border-slate-800/50 pt-8 mt-16 text-center">
+        <p class="text-slate-500 text-sm">Brev Operator — Orchestration Deep Dive</p>
+        <p class="text-slate-600 text-xs mt-2">Part of the <a href="brev-operator.html" class="text-orange-400 hover:text-orange-300">Brev Operator Planning Document</a></p>
+        <p class="text-slate-600 text-xs mt-1">Last updated: March 18, 2026</p>
+      </footer>
+
+    </main>
+  </div>
+
+</body>
+</html>

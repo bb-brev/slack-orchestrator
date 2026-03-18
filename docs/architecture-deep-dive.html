@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brev Operator — Architecture Deep Dive</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwindcss.config = {
+      theme: {
+        extend: {
+          colors: { slate: { 850: '#172033', 950: '#0a0f1a' } },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body { background: #0a0f1a; }
+    .gradient-text { background: linear-gradient(135deg, #f97316, #ef4444, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .gradient-text-blue { background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(100, 116, 139, 0.2); backdrop-filter: blur(12px); transition: border-color 0.2s; }
+    .card:hover { border-color: rgba(249, 115, 22, 0.3); }
+    .glow { box-shadow: 0 0 60px rgba(249, 115, 22, 0.06); }
+    .nav-link.active { color: #f97316; border-left-color: #f97316; }
+    .tag { font-size: 0.65rem; padding: 2px 8px; border-radius: 9999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .tag-draft { background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
+    .tag-new { background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.3); }
+    .arch-diagram { background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(100, 116, 139, 0.2); font-family: 'JetBrains Mono', monospace; overflow-x: auto; }
+    table { border-collapse: separate; border-spacing: 0; }
+    th { background: rgba(30, 41, 59, 0.8); }
+    td, th { border-bottom: 1px solid rgba(100, 116, 139, 0.15); }
+    @media (max-width: 1024px) { .sidebar { display: none; } }
+  </style>
+</head>
+<body class="text-slate-300 font-sans antialiased">
+
+  <!-- Header -->
+  <header class="fixed top-0 w-full z-50 border-b border-slate-800/50 bg-[#0a0f1a]/80 backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="brev-operator.html" class="text-orange-400 hover:text-orange-300 text-sm font-medium transition-colors flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          Back to Planning Doc
+        </a>
+        <span class="text-slate-600 mx-1">·</span>
+        <div class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+          </svg>
+        </div>
+        <span class="font-bold text-white text-lg">Architecture Deep Dive</span>
+        <span class="tag tag-draft ml-2">Technical</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-slate-500">
+        <span>2026-03-18</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex">
+    <!-- Sidebar -->
+    <nav class="sidebar fixed left-0 top-16 bottom-0 w-56 border-r border-slate-800/50 bg-[#0a0f1a]/60 backdrop-blur-xl overflow-y-auto py-6 px-4 z-40">
+      <div class="space-y-1 text-sm">
+        <p class="px-3 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">Multi-Tenant</p>
+        <a href="#isolation" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">1 · Isolation Model</a>
+        <a href="#tenant-lifecycle" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">2 · Tenant Lifecycle</a>
+        <a href="#data-isolation" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">3 · Data Isolation</a>
+        <a href="#tenant-config" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">4 · Tenant Config</a>
+        <p class="px-3 py-1 pt-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Infrastructure</p>
+        <a href="#topology" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">5 · Service Topology</a>
+        <a href="#agent-execution" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">6 · Agent Execution</a>
+        <a href="#cron-execution" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">7 · Cron / Scheduling</a>
+        <a href="#queues" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">8 · Queue Architecture</a>
+        <a href="#cost-model" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">9 · Cost Model</a>
+        <p class="px-3 py-1 pt-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Slack</p>
+        <a href="#slack-oauth" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">10 · OAuth Flow</a>
+        <a href="#slack-tokens" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">11 · Token Storage</a>
+        <a href="#slack-events" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">12 · Event Delivery</a>
+        <a href="#slack-ratelimits" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">13 · Rate Limits</a>
+        <p class="px-3 py-1 pt-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Brev API</p>
+        <a href="#brev-auth" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">14 · Service Auth</a>
+        <a href="#brev-caching" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">15 · Caching Strategy</a>
+        <p class="px-3 py-1 pt-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Scaling</p>
+        <a href="#horizontal" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">16 · Horizontal Scaling</a>
+        <a href="#cold-starts" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">17 · Cold Starts</a>
+        <a href="#connection-pooling" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">18 · Connection Pooling</a>
+        <a href="#cost-projections" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">19 · Cost Projections</a>
+      </div>
+    </nav>
+
+    <!-- Main -->
+    <main class="ml-0 lg:ml-56 flex-1 max-w-4xl mx-auto px-6 pt-28 pb-20">
+
+      <!-- Hero -->
+      <section class="mb-16">
+        <div class="flex items-center gap-2 text-sm text-orange-400 mb-4 font-medium">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          Infrastructure &amp; Multi-Tenant Architecture
+        </div>
+        <h1 class="text-4xl md:text-5xl font-black text-white leading-tight mb-4">
+          Architecture<br><span class="gradient-text">Deep Dive</span>
+        </h1>
+        <p class="text-lg text-slate-400 max-w-2xl mb-8">
+          How the Brev Operator isolates tenants, executes agents, manages Slack integrations, and scales from 10 to 1,000 organizations — all on serverless AWS infrastructure orchestrated by SST.
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <span class="px-3 py-1 rounded-full bg-orange-500/10 text-orange-400 text-sm border border-orange-500/20">SST v3</span>
+          <span class="px-3 py-1 rounded-full bg-purple-500/10 text-purple-400 text-sm border border-purple-500/20">AWS Lambda</span>
+          <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-sm border border-emerald-500/20">Postgres RLS</span>
+          <span class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-sm border border-blue-500/20">Multi-Tenant</span>
+          <span class="px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 text-sm border border-rose-500/20">SQS / SNS</span>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 1: MULTI-TENANT DESIGN                              -->
+      <!-- ============================================================ -->
+
+      <div class="mb-6">
+        <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Part I</h2>
+        <h3 class="text-2xl font-bold text-white">Multi-Tenant Design</h3>
+      </div>
+
+      <!-- 1. Isolation Model -->
+      <section id="isolation" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">01</span>
+          Per-Org Isolation Model
+        </h4>
+        <div class="card rounded-xl p-6 mb-4">
+          <p class="text-slate-300 mb-4">Every Slack workspace that installs Brev Operator becomes a <strong class="text-white">tenant</strong> (called an <code class="text-orange-400 font-mono text-sm">org</code>). The isolation boundary is the <code class="text-orange-400 font-mono text-sm">org_id</code> — a UUID generated at install time. Three things are scoped to it:</p>
+          <div class="grid md:grid-cols-3 gap-4 mb-4">
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-white font-semibold text-sm mb-2">🔐 Agent Sessions</h5>
+              <p class="text-slate-400 text-sm">Every agent invocation carries <code class="text-orange-400 font-mono text-xs">org_id</code> in its execution context. Agents can only read/write data belonging to their org. The session is created with org-scoped credentials and destroyed after completion.</p>
+            </div>
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-white font-semibold text-sm mb-2">📊 Data Access</h5>
+              <p class="text-slate-400 text-sm">All database queries pass through Postgres Row-Level Security. Even if application code has a bug, the DB layer enforces that Org A can never see Org B's goals, KPIs, check-ins, or conversation history.</p>
+            </div>
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-white font-semibold text-sm mb-2">💬 Slack Tokens</h5>
+              <p class="text-slate-400 text-sm">Each workspace has its own bot token (<code class="text-orange-400 font-mono text-xs">xoxb-...</code>). Tokens are encrypted at rest, loaded per-request based on the incoming workspace ID, and never shared across orgs.</p>
+            </div>
+          </div>
+        </div>
+        <div class="arch-diagram rounded-xl p-5 text-sm leading-relaxed mb-4">
+<pre class="text-slate-400">
+┌─────────────────────────────────────────────────────────────┐
+│                     Request Flow                            │
+│                                                             │
+│  Slack Event (team_id: T123)                                │
+│       │                                                     │
+│       ▼                                                     │
+│  ┌─────────────┐    resolve     ┌──────────────┐            │
+│  │ API Gateway  │──────────────▶│ Org Resolver  │            │
+│  └─────────────┘    team_id     │  → org_id     │            │
+│                                 └──────┬───────┘            │
+│                                        │                    │
+│                          ┌─────────────┼─────────────┐      │
+│                          ▼             ▼             ▼      │
+│                     ┌────────┐   ┌────────┐   ┌────────┐   │
+│                     │ Agent  │   │  DB    │   │ Slack  │   │
+│                     │Context │   │ (RLS)  │   │ Token  │   │
+│                     │org_id  │   │org_id  │   │org_id  │   │
+│                     └────────┘   └────────┘   └────────┘   │
+└─────────────────────────────────────────────────────────────┘
+</pre>
+        </div>
+      </section>
+
+      <!-- 2. Tenant Lifecycle -->
+      <section id="tenant-lifecycle" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">02</span>
+          Tenant Lifecycle
+        </h4>
+        <div class="card rounded-xl p-6">
+          <div class="space-y-6">
+            <div class="flex gap-4">
+              <div class="flex-shrink-0 w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-sm">1</div>
+              <div>
+                <h5 class="text-white font-semibold mb-1">Workspace Install</h5>
+                <p class="text-slate-400 text-sm">Admin clicks "Add to Slack" → OAuth consent → we receive <code class="text-orange-400 font-mono text-xs">access_token</code> + <code class="text-orange-400 font-mono text-xs">team_id</code>. A new <code class="text-orange-400 font-mono text-xs">org</code> row is created with a UUID, the bot token is encrypted and stored, and the workspace metadata (name, icon, domain) is cached.</p>
+              </div>
+            </div>
+            <div class="flex gap-4">
+              <div class="flex-shrink-0 w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-sm">2</div>
+              <div>
+                <h5 class="text-white font-semibold mb-1">User Mapping</h5>
+                <p class="text-slate-400 text-sm">On first interaction (or via bulk sync), Slack user IDs are mapped to Brev user profiles. The mapping table (<code class="text-orange-400 font-mono text-xs">org_users</code>) links <code class="text-orange-400 font-mono text-xs">slack_user_id</code> → <code class="text-orange-400 font-mono text-xs">brev_user_id</code> within the org scope. This enables the Operator to mention the right people and attribute check-ins correctly.</p>
+              </div>
+            </div>
+            <div class="flex gap-4">
+              <div class="flex-shrink-0 w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-sm">3</div>
+              <div>
+                <h5 class="text-white font-semibold mb-1">Agent Provisioning</h5>
+                <p class="text-slate-400 text-sm">Default agent configurations are created for the org: planning cadence (weekly), check-in schedule (Mon/Thu), escalation rules (48h no response → manager ping). These are stored in <code class="text-orange-400 font-mono text-xs">org_settings</code> and can be customized via Slack commands or a future web dashboard.</p>
+              </div>
+            </div>
+            <div class="flex gap-4">
+              <div class="flex-shrink-0 w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-sm">4</div>
+              <div>
+                <h5 class="text-white font-semibold mb-1">Active Operation</h5>
+                <p class="text-slate-400 text-sm">The org is now live. Cron timers are registered, event handlers are active, and agents can be invoked. The org enters a steady state of: receive events → run agents → send messages → update state → repeat.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Data Isolation -->
+      <section id="data-isolation" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">03</span>
+          Data Isolation — Postgres RLS
+        </h4>
+        <div class="card rounded-xl p-6 mb-4">
+          <p class="text-slate-300 mb-4">Row-Level Security is the <strong class="text-white">hard floor</strong> of tenant isolation. Even if application code is buggy, the database enforces boundaries.</p>
+          <div class="arch-diagram rounded-lg p-4 text-sm mb-4">
+<pre class="text-emerald-400">
+<span class="text-slate-500">-- Every tenant-scoped table has this policy:</span>
+<span class="text-blue-400">ALTER TABLE</span> goals <span class="text-blue-400">ENABLE ROW LEVEL SECURITY</span>;
+
+<span class="text-blue-400">CREATE POLICY</span> org_isolation <span class="text-blue-400">ON</span> goals
+  <span class="text-blue-400">USING</span> (org_id = current_setting(<span class="text-yellow-300">'app.current_org_id'</span>)::<span class="text-purple-400">uuid</span>);
+
+<span class="text-slate-500">-- At the start of every request:</span>
+<span class="text-blue-400">SET LOCAL</span> app.current_org_id = <span class="text-yellow-300">'org-uuid-here'</span>;
+
+<span class="text-slate-500">-- Tables with RLS enabled:</span>
+<span class="text-slate-500">-- goals, kpis, check_ins, agent_sessions, org_users,</span>
+<span class="text-slate-500">-- org_settings, conversations, slack_tokens, cron_schedules</span>
+</pre>
+          </div>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-white font-semibold text-sm mb-2">Application Layer</h5>
+              <p class="text-slate-400 text-sm">Every DB connection sets <code class="text-orange-400 font-mono text-xs">app.current_org_id</code> at transaction start. This is set by middleware, not by individual queries. Forgetting a WHERE clause is harmless — RLS blocks it.</p>
+            </div>
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-white font-semibold text-sm mb-2">API Layer</h5>
+              <p class="text-slate-400 text-sm">All API calls include <code class="text-orange-400 font-mono text-xs">org_id</code> from the resolved Slack workspace. Internal service-to-service calls pass org_id as a header. There is no "global" query mode for tenant data.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Tenant Configuration -->
+      <section id="tenant-config" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">04</span>
+          Tenant Configuration
+        </h4>
+        <div class="card rounded-xl p-6">
+          <p class="text-slate-300 mb-4">Per-org settings live in the <code class="text-orange-400 font-mono text-sm">org_settings</code> table (JSONB column for flexibility, typed columns for critical paths).</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="text-left px-4 py-3 text-slate-300 font-semibold rounded-tl-lg">Setting</th>
+                  <th class="text-left px-4 py-3 text-slate-300 font-semibold">Storage</th>
+                  <th class="text-left px-4 py-3 text-slate-300 font-semibold rounded-tr-lg">Loaded</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-4 py-2 text-white font-mono text-xs">planning_cadence</td><td class="px-4 py-2">Typed column (enum)</td><td class="px-4 py-2">At cron registration</td></tr>
+                <tr><td class="px-4 py-2 text-white font-mono text-xs">checkin_schedule</td><td class="px-4 py-2">Typed column (cron expr)</td><td class="px-4 py-2">At cron registration</td></tr>
+                <tr><td class="px-4 py-2 text-white font-mono text-xs">escalation_rules</td><td class="px-4 py-2">JSONB</td><td class="px-4 py-2">At agent invocation</td></tr>
+                <tr><td class="px-4 py-2 text-white font-mono text-xs">notification_channels</td><td class="px-4 py-2">JSONB (channel IDs)</td><td class="px-4 py-2">At message send</td></tr>
+                <tr><td class="px-4 py-2 text-white font-mono text-xs">timezone</td><td class="px-4 py-2">Typed column (string)</td><td class="px-4 py-2">At schedule evaluation</td></tr>
+                <tr><td class="px-4 py-2 text-white font-mono text-xs">custom_prompts</td><td class="px-4 py-2">JSONB</td><td class="px-4 py-2">At agent invocation</td></tr>
+                <tr><td class="px-4 py-2 text-white font-mono text-xs">feature_flags</td><td class="px-4 py-2">JSONB</td><td class="px-4 py-2">Cached in Redis (5m TTL)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-slate-500 text-sm mt-4">Settings are loaded lazily — fetched when the relevant subsystem needs them, then cached in Redis with a 5-minute TTL keyed by <code class="text-orange-400 font-mono text-xs">org:{org_id}:settings</code>. Cache is invalidated on write.</p>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 2: INFRASTRUCTURE                                    -->
+      <!-- ============================================================ -->
+
+      <div class="mb-6 mt-20">
+        <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Part II</h2>
+        <h3 class="text-2xl font-bold text-white">Infrastructure (SST + AWS)</h3>
+      </div>
+
+      <!-- 5. Service Topology -->
+      <section id="topology" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">05</span>
+          Service Topology
+        </h4>
+        <div class="arch-diagram rounded-xl p-5 text-sm leading-relaxed mb-4">
+<pre class="text-slate-400">
+┌──────────────────────────────────────────────────────────────────────┐
+│                        AWS (SST-managed)                            │
+│                                                                      │
+│  ┌───────────┐     ┌──────────────────┐     ┌──────────────────┐    │
+│  │  Slack     │     │   API Gateway    │     │   CloudFront     │    │
+│  │  Events    │────▶│   (HTTP API)     │◀────│   (future web)   │    │
+│  └───────────┘     └────────┬─────────┘     └──────────────────┘    │
+│                             │                                        │
+│                    ┌────────┴─────────┐                              │
+│                    ▼                  ▼                               │
+│            ┌──────────────┐  ┌──────────────┐                        │
+│            │  Lambda       │  │  Lambda       │                       │
+│            │  (Event       │  │  (Slash       │                       │
+│            │   Handlers)   │  │   Commands)   │                       │
+│            └──────┬───────┘  └──────┬───────┘                        │
+│                   │                 │                                 │
+│                   ▼                 ▼                                 │
+│            ┌─────────────────────────────┐                           │
+│            │     SQS (Agent Task Queue)  │                           │
+│            └─────────────┬───────────────┘                           │
+│                          │                                           │
+│                          ▼                                           │
+│            ┌─────────────────────────────┐                           │
+│            │  Lambda / ECS Fargate        │                          │
+│            │  (Agent Execution Workers)   │                          │
+│            └──────┬──────────────┬───────┘                           │
+│                   │              │                                    │
+│          ┌────────▼───┐  ┌──────▼──────┐                             │
+│          │  Postgres   │  │   Redis     │                            │
+│          │  (RDS)      │  │ (ElastiC.)  │                            │
+│          │  + RLS      │  │  cache +    │                            │
+│          │             │  │  sessions   │                            │
+│          └─────────────┘  └─────────────┘                            │
+└──────────────────────────────────────────────────────────────────────┘
+</pre>
+        </div>
+        <div class="card rounded-xl p-6">
+          <p class="text-slate-300 mb-3">All infrastructure is defined in SST v3 (Ion). No manual AWS resources.</p>
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <h5 class="text-white font-semibold mb-2">Compute</h5>
+              <ul class="text-slate-400 space-y-1">
+                <li>• <strong class="text-slate-300">Event Handlers:</strong> Lambda (128MB, 30s timeout) — receives Slack events, validates, enqueues</li>
+                <li>• <strong class="text-slate-300">Agent Workers:</strong> Lambda (512MB–1GB, 5min timeout) or ECS Fargate for long-running agents</li>
+                <li>• <strong class="text-slate-300">Cron Dispatcher:</strong> EventBridge Scheduler → Lambda that fans out per-org tasks to SQS</li>
+              </ul>
+            </div>
+            <div>
+              <h5 class="text-white font-semibold mb-2">Data</h5>
+              <ul class="text-slate-400 space-y-1">
+                <li>• <strong class="text-slate-300">Postgres (RDS):</strong> db.t4g.medium initially, RLS on all tenant tables, pgBouncer for pooling</li>
+                <li>• <strong class="text-slate-300">Redis (ElastiCache):</strong> cache.t4g.micro — settings cache, rate limit counters, session state</li>
+                <li>• <strong class="text-slate-300">S3:</strong> Agent conversation logs (cold storage), exported reports</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Agent Execution -->
+      <section id="agent-execution" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">06</span>
+          Agent Execution
+        </h4>
+        <div class="card rounded-xl p-6">
+          <p class="text-slate-300 mb-4">Agent sessions are ephemeral, stateless, and org-scoped. Here's the lifecycle:</p>
+          <div class="arch-diagram rounded-lg p-4 text-sm mb-4">
+<pre class="text-slate-400">
+<span class="text-orange-400">1. TRIGGER</span>        Slack event / cron timer / manual command
+       │
+       ▼
+<span class="text-orange-400">2. ENQUEUE</span>        SQS message: { org_id, agent_type, payload, trace_id }
+       │
+       ▼
+<span class="text-orange-400">3. DEQUEUE</span>        Worker Lambda picks up message
+       │
+       ▼
+<span class="text-orange-400">4. INITIALIZE</span>     - Set DB context: SET LOCAL app.current_org_id
+                   - Load org settings from Redis/Postgres
+                   - Load Slack bot token for the org
+                   - Create agent_session row (status: running)
+       │
+       ▼
+<span class="text-orange-400">5. EXECUTE</span>        - Fetch data from Brev API (goals, KPIs, users)
+                   - Run LLM reasoning chain
+                   - Determine actions (send messages, update data)
+       │
+       ▼
+<span class="text-orange-400">6. ACT</span>            - Send Slack messages via org's bot token
+                   - Write to Postgres (check-ins, status updates)
+                   - Enqueue follow-up tasks if needed
+       │
+       ▼
+<span class="text-orange-400">7. CLEANUP</span>        - Update agent_session row (status: complete, duration, tokens_used)
+                   - Archive conversation log to S3
+                   - Release DB connection back to pool
+</pre>
+          </div>
+          <div class="bg-orange-500/5 border border-orange-500/20 rounded-lg p-4 text-sm">
+            <p class="text-orange-300"><strong>Key design decision:</strong> Agents are stateless between invocations. All state lives in Postgres and Redis. If a Lambda is recycled mid-execution, the SQS visibility timeout expires and the message is retried. Agent actions are idempotent (dedup key on agent_session + action hash).</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. Cron Execution -->
+      <section id="cron-execution" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">07</span>
+          Cron / Per-Tenant Scheduling
+        </h4>
+        <div class="card rounded-xl p-6">
+          <p class="text-slate-300 mb-4">There is <strong class="text-white">no global cron</strong>. Each org has its own schedules, evaluated in its own timezone.</p>
+          <div class="arch-diagram rounded-lg p-4 text-sm mb-4">
+<pre class="text-slate-400">
+<span class="text-blue-400">EventBridge Scheduler (runs every minute)</span>
+       │
+       ▼
+<span class="text-blue-400">Dispatcher Lambda</span>
+       │
+       ├── SELECT * FROM cron_schedules
+       │   WHERE next_run_at <= NOW()
+       │   ORDER BY next_run_at
+       │   LIMIT 100
+       │   FOR UPDATE SKIP LOCKED   <span class="text-slate-500">← prevents double-dispatch</span>
+       │
+       ├── For each schedule:
+       │   ├── Enqueue SQS message { org_id, agent_type, schedule_id }
+       │   └── UPDATE cron_schedules SET next_run_at = <span class="text-slate-500">calculate_next()</span>
+       │
+       └── Done (< 1 second typically)
+
+<span class="text-emerald-400">Per-org schedules (examples):</span>
+  Acme Corp (America/New_York):  Mon 9:00am  → check-in nudges
+  Acme Corp (America/New_York):  Fri 4:00pm  → weekly planning review
+  Startup Inc (America/Los_Angeles): Tue 10:00am → check-in nudges
+  Startup Inc (America/Los_Angeles): Thu 3:00pm  → mid-week pulse
+</pre>
+          </div>
+          <p class="text-slate-400 text-sm">The <code class="text-orange-400 font-mono text-xs">cron_schedules</code> table stores: <code class="text-orange-400 font-mono text-xs">org_id</code>, <code class="text-orange-400 font-mono text-xs">agent_type</code>, <code class="text-orange-400 font-mono text-xs">cron_expr</code>, <code class="text-orange-400 font-mono text-xs">timezone</code>, <code class="text-orange-400 font-mono text-xs">next_run_at</code> (UTC), <code class="text-orange-400 font-mono text-xs">last_run_at</code>, <code class="text-orange-400 font-mono text-xs">enabled</code>. The <code class="text-orange-400 font-mono text-xs">next_run_at</code> is always stored in UTC but calculated from the org's timezone.</p>
+        </div>
+      </section>
+
+      <!-- 8. Queue Architecture -->
+      <section id="queues" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">08</span>
+          Queue Architecture
+        </h4>
+        <div class="card rounded-xl p-6">
+          <div class="arch-diagram rounded-lg p-4 text-sm mb-4">
+<pre class="text-slate-400">
+┌─────────────┐    ┌─────────────────┐    ┌─────────────────────┐
+│  Producers   │    │     SQS          │    │    Consumers         │
+│              │    │                  │    │                     │
+│ Event Handler│───▶│ agent-tasks      │───▶│ Agent Worker Lambda │
+│ Cron Dispatch│───▶│ (FIFO, per-org   │    │ (concurrency: 10)   │
+│ Slash Command│───▶│  message group)  │    │                     │
+└─────────────┘    └────────┬─────────┘    └─────────────────────┘
+                            │ failures
+                            ▼
+                   ┌─────────────────┐
+                   │ agent-tasks-dlq  │ ← after 3 retries
+                   │ (Dead Letter Q)  │
+                   └────────┬────────┘
+                            │ alarm
+                            ▼
+                   ┌─────────────────┐
+                   │ CloudWatch Alarm │
+                   │ → SNS → PagerDuty│
+                   └─────────────────┘
+
+<span class="text-emerald-400">Cross-Service Events (SNS):</span>
+  ┌──────────────────────┐
+  │ operator-events (SNS) │
+  │                       │
+  │ Topics:               │
+  │  • org.installed      │──▶ Provision defaults, notify team
+  │  • org.uninstalled    │──▶ Cleanup, archive data
+  │  • agent.completed    │──▶ Metrics, billing counters
+  │  • agent.failed       │──▶ Alerting, auto-retry logic
+  │  • checkin.received   │──▶ Update goal status, notify manager
+  └──────────────────────┘
+</pre>
+          </div>
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-white font-semibold mb-2">Why FIFO + Message Groups?</h5>
+              <p class="text-slate-400">Message group ID = <code class="text-orange-400 font-mono text-xs">org_id</code>. This ensures per-org ordering (no two agents for the same org run concurrently) while allowing cross-org parallelism. Prevents race conditions on org state.</p>
+            </div>
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-white font-semibold mb-2">DLQ Strategy</h5>
+              <p class="text-slate-400">Messages that fail 3 times land in the DLQ. A CloudWatch alarm fires if DLQ depth > 0. On-call reviews and either replays or discards. DLQ messages include full context for debugging.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 9. Cost Model -->
+      <section id="cost-model" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">09</span>
+          Per-Tenant Cost Model
+        </h4>
+        <div class="card rounded-xl p-6">
+          <p class="text-slate-300 mb-4">Costs are driven by three things: <strong class="text-white">LLM tokens</strong> (dominant), <strong class="text-white">compute</strong> (Lambda duration), and <strong class="text-white">storage</strong> (DB rows). Infrastructure costs are shared.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="text-left px-4 py-3 text-slate-300 font-semibold rounded-tl-lg">Component</th>
+                  <th class="text-left px-4 py-3 text-slate-300 font-semibold">Cost Driver</th>
+                  <th class="text-left px-4 py-3 text-slate-300 font-semibold rounded-tr-lg">Per-Org Attribution</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-4 py-2 text-white">LLM (Claude/GPT)</td><td class="px-4 py-2">Tokens consumed</td><td class="px-4 py-2">Tracked per agent_session → billed to org</td></tr>
+                <tr><td class="px-4 py-2 text-white">Lambda Compute</td><td class="px-4 py-2">GB-seconds</td><td class="px-4 py-2">Logged per invocation with org_id tag</td></tr>
+                <tr><td class="px-4 py-2 text-white">Postgres (RDS)</td><td class="px-4 py-2">Shared instance</td><td class="px-4 py-2">Row counts per org for capacity planning</td></tr>
+                <tr><td class="px-4 py-2 text-white">Redis</td><td class="px-4 py-2">Shared instance</td><td class="px-4 py-2">Key-prefix monitoring</td></tr>
+                <tr><td class="px-4 py-2 text-white">SQS</td><td class="px-4 py-2">Messages sent</td><td class="px-4 py-2">Negligible ($0.40/million)</td></tr>
+                <tr><td class="px-4 py-2 text-white">S3 (logs)</td><td class="px-4 py-2">Storage volume</td><td class="px-4 py-2">Prefix per org_id</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="bg-orange-500/5 border border-orange-500/20 rounded-lg p-4 text-sm mt-4">
+            <p class="text-orange-300"><strong>Predictability levers:</strong> Per-org rate limits on agent invocations (max 50/day), token budgets per agent session (max 8K output tokens), and circuit breakers on runaway agents. Monthly cost cap per org tier.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 3: SLACK APP ARCHITECTURE                            -->
+      <!-- ============================================================ -->
+
+      <div class="mb-6 mt-20">
+        <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Part III</h2>
+        <h3 class="text-2xl font-bold text-white">Slack App Architecture</h3>
+      </div>
+
+      <!-- 10. OAuth -->
+      <section id="slack-oauth" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">10</span>
+          OAuth Install Flow (Multi-Tenant)
+        </h4>
+        <div class="card rounded-xl p-6">
+          <div class="arch-diagram rounded-lg p-4 text-sm mb-4">
+<pre class="text-slate-400">
+<span class="text-purple-400">Admin clicks "Add to Slack"</span>
+       │
+       ▼
+<span class="text-purple-400">Slack OAuth Authorize URL</span>
+  https://slack.com/oauth/v2/authorize?
+    client_id=...&
+    scope=chat:write,commands,app_mentions:read,
+          users:read,channels:read,groups:read&
+    redirect_uri=https://api.brevoperator.com/slack/oauth/callback
+       │
+       ▼
+<span class="text-purple-400">Callback Handler (Lambda)</span>
+  1. Exchange code for token → { access_token, team: { id, name } }
+  2. Check if org exists for team.id
+     ├── Yes → update token, mark re-installed
+     └── No  → CREATE org, CREATE org_settings (defaults)
+  3. Encrypt token with KMS → store in slack_tokens table
+  4. Publish SNS: org.installed { org_id, team_id }
+  5. Send welcome DM to installing admin
+  6. Redirect to success page
+</pre>
+          </div>
+          <p class="text-slate-400 text-sm">Scopes are minimal — we request only what's needed. No <code class="text-orange-400 font-mono text-xs">admin</code> scopes. The bot token (<code class="text-orange-400 font-mono text-xs">xoxb-</code>) is the only credential we store; we don't use user tokens.</p>
+        </div>
+      </section>
+
+      <!-- 11. Token Storage -->
+      <section id="slack-tokens" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">11</span>
+          Token Storage &amp; Refresh
+        </h4>
+        <div class="card rounded-xl p-6">
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <h5 class="text-white font-semibold mb-2">Storage</h5>
+              <ul class="text-slate-400 space-y-2">
+                <li>• Bot tokens encrypted with <strong class="text-slate-300">AWS KMS</strong> (AES-256-GCM)</li>
+                <li>• Stored in <code class="text-orange-400 font-mono text-xs">slack_tokens</code> table (RLS-protected)</li>
+                <li>• Columns: <code class="text-orange-400 font-mono text-xs">org_id</code>, <code class="text-orange-400 font-mono text-xs">encrypted_token</code>, <code class="text-orange-400 font-mono text-xs">token_type</code>, <code class="text-orange-400 font-mono text-xs">scopes</code>, <code class="text-orange-400 font-mono text-xs">installed_at</code>, <code class="text-orange-400 font-mono text-xs">installed_by</code></li>
+                <li>• Decrypted at request time, never cached in plaintext</li>
+              </ul>
+            </div>
+            <div>
+              <h5 class="text-white font-semibold mb-2">Refresh Strategy</h5>
+              <ul class="text-slate-400 space-y-2">
+                <li>• Slack V2 OAuth bot tokens <strong class="text-slate-300">don't expire</strong> (no refresh needed)</li>
+                <li>• Token rotation happens on re-install (admin re-authorizes)</li>
+                <li>• If a token is revoked (app uninstalled), the <code class="text-orange-400 font-mono text-xs">tokens_revoked</code> event marks the org as inactive</li>
+                <li>• Periodic health check: attempt <code class="text-orange-400 font-mono text-xs">auth.test</code> per org, flag failures</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 12. Event Delivery -->
+      <section id="slack-events" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">12</span>
+          Event Delivery — HTTP, Not Socket Mode
+        </h4>
+        <div class="card rounded-xl p-6">
+          <p class="text-slate-300 mb-4">We use <strong class="text-white">HTTP event subscriptions</strong> behind API Gateway, not Socket Mode. This is a deliberate choice for multi-tenant serverless:</p>
+          <div class="grid md:grid-cols-2 gap-4 text-sm mb-4">
+            <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-4">
+              <h5 class="text-emerald-400 font-semibold mb-2">✓ HTTP Mode (our choice)</h5>
+              <ul class="text-slate-400 space-y-1">
+                <li>• Serverless-compatible (Lambda)</li>
+                <li>• No persistent connections to maintain</li>
+                <li>• Auto-scales with API Gateway</li>
+                <li>• One endpoint for all workspaces</li>
+                <li>• Works behind CDN/WAF</li>
+              </ul>
+            </div>
+            <div class="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+              <h5 class="text-red-400 font-semibold mb-2">✗ Socket Mode (rejected)</h5>
+              <ul class="text-slate-400 space-y-1">
+                <li>• Requires persistent WebSocket per workspace</li>
+                <li>• N workspaces = N connections = ECS/EC2 required</li>
+                <li>• Connection management complexity</li>
+                <li>• No auto-scaling benefit</li>
+                <li>• Reconnection handling burden</li>
+              </ul>
+            </div>
+          </div>
+          <div class="arch-diagram rounded-lg p-4 text-sm">
+<pre class="text-slate-400">
+POST /slack/events  ←  Slack sends all workspace events here
+       │
+       ├── Verify request signature (HMAC-SHA256)
+       ├── Parse event: extract team_id, event_type, payload
+       ├── Respond 200 immediately (Slack requires < 3 seconds)
+       │
+       └── Async: enqueue to SQS for processing
+           { org_id: resolve(team_id), event_type, payload }
+</pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- 13. Rate Limits -->
+      <section id="slack-ratelimits" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">13</span>
+          Rate Limit Management
+        </h4>
+        <div class="card rounded-xl p-6">
+          <p class="text-slate-300 mb-4">Slack rate limits are <strong class="text-white">per-workspace, per-method</strong>. We track them per-org in Redis:</p>
+          <div class="arch-diagram rounded-lg p-4 text-sm mb-4">
+<pre class="text-slate-400">
+<span class="text-emerald-400">Redis keys (per org, per method):</span>
+  ratelimit:{org_id}:chat.postMessage  →  { remaining: 45, reset: 1710782400 }
+  ratelimit:{org_id}:conversations.info →  { remaining: 18, reset: 1710782400 }
+
+<span class="text-emerald-400">Rate limit middleware:</span>
+  1. Before API call: check Redis counter
+  2. If remaining > 0: proceed, decrement
+  3. If remaining = 0: queue for retry after reset time
+  4. On 429 response: update Redis from Retry-After header
+  5. Exponential backoff with jitter on retries
+
+<span class="text-emerald-400">Slack Tier Limits (approximate):</span>
+  Tier 1 (chat.postMessage):  1 req/sec   (~50/min burst)
+  Tier 2 (conversations.*):   20 req/min
+  Tier 3 (users.info):        50 req/min
+  Tier 4 (auth.test):         100+ req/min
+</pre>
+          </div>
+          <p class="text-slate-400 text-sm">Because agents send messages on behalf of different orgs, rate limits don't collide across tenants. Org A's message volume doesn't affect Org B. Each org's bot token has its own Slack rate limit bucket.</p>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 4: BREV API INTEGRATION                             -->
+      <!-- ============================================================ -->
+
+      <div class="mb-6 mt-20">
+        <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Part IV</h2>
+        <h3 class="text-2xl font-bold text-white">Brev API Integration</h3>
+      </div>
+
+      <!-- 14. Service Auth -->
+      <section id="brev-auth" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">14</span>
+          Service-to-Service Auth
+        </h4>
+        <div class="card rounded-xl p-6">
+          <p class="text-slate-300 mb-4">The Operator authenticates to the Brev API as a <strong class="text-white">service principal</strong>, not as individual users. This is internal infrastructure, not a public API integration.</p>
+          <div class="arch-diagram rounded-lg p-4 text-sm mb-4">
+<pre class="text-slate-400">
+<span class="text-blue-400">Authentication Flow:</span>
+
+  Operator Service                          Brev API
+       │                                       │
+       │  POST /api/v1/goals?org_id=...        │
+       │  Authorization: Bearer {service_jwt}   │
+       │  X-Operator-Org: {org_id}              │
+       │──────────────────────────────────────▶│
+       │                                       │
+       │  Brev API validates:                  │
+       │  1. JWT signature (shared secret/RSA) │
+       │  2. Service ID in allowed list        │
+       │  3. org_id matches JWT claims         │
+       │                                       │
+       │◀──────────────────────────────────────│
+       │  200 OK { goals: [...] }              │
+
+<span class="text-blue-400">Service JWT Claims:</span>
+  {
+    "sub": "operator-service",
+    "iss": "brev-internal",
+    "org_id": "uuid",       <span class="text-slate-500">← scoped to one org per request</span>
+    "permissions": ["goals:read", "goals:write", "kpis:read",
+                    "users:read", "checkins:write"],
+    "exp": 1710786000       <span class="text-slate-500">← short-lived (15 min)</span>
+  }
+</pre>
+          </div>
+          <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30 text-sm">
+            <p class="text-slate-400"><strong class="text-white">Key principle:</strong> The Operator never holds user credentials. It acts on behalf of an org, not a user. User identity is resolved from Slack user IDs mapped to Brev user IDs, but the API calls use the service token. This simplifies auth and avoids token-per-user sprawl.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 15. Caching Strategy -->
+      <section id="brev-caching" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">15</span>
+          Caching Strategy
+        </h4>
+        <div class="card rounded-xl p-6">
+          <div class="grid md:grid-cols-2 gap-4 text-sm mb-4">
+            <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-4">
+              <h5 class="text-emerald-400 font-semibold mb-2">✓ Cache (stable data)</h5>
+              <ul class="text-slate-400 space-y-2">
+                <li><strong class="text-slate-300">User profiles</strong> — name, email, role, Slack ID mapping. TTL: 1 hour. Invalidate on user.updated webhook.</li>
+                <li><strong class="text-slate-300">Goal trees</strong> — objective hierarchy, ownership. TTL: 15 min. Invalidate on goal.updated.</li>
+                <li><strong class="text-slate-300">Team structure</strong> — who reports to whom. TTL: 1 hour.</li>
+                <li><strong class="text-slate-300">Org settings</strong> — cadence, timezone, feature flags. TTL: 5 min.</li>
+              </ul>
+            </div>
+            <div class="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+              <h5 class="text-red-400 font-semibold mb-2">✗ Always Fetch Fresh</h5>
+              <ul class="text-slate-400 space-y-2">
+                <li><strong class="text-slate-300">KPI values</strong> — current metrics, progress percentages. Stale data = wrong decisions.</li>
+                <li><strong class="text-slate-300">Check-in status</strong> — who has/hasn't checked in. Must be real-time accurate for nudges.</li>
+                <li><strong class="text-slate-300">Recent activity</strong> — latest comments, updates, blockers. Context must be current.</li>
+                <li><strong class="text-slate-300">Goal status</strong> — on-track/at-risk/off-track. Changes frequently.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="arch-diagram rounded-lg p-4 text-sm">
+<pre class="text-slate-400">
+<span class="text-emerald-400">Cache key pattern:</span>
+  brev:{org_id}:users           → hash of all user profiles
+  brev:{org_id}:goals:tree      → serialized goal hierarchy
+  brev:{org_id}:teams           → team structure
+  org:{org_id}:settings         → org configuration
+
+<span class="text-emerald-400">Invalidation:</span>
+  • TTL-based expiry (primary)
+  • Webhook-driven invalidation (secondary, when available)
+  • Manual flush via admin command: /operator cache-clear
+</pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 5: SCALING                                           -->
+      <!-- ============================================================ -->
+
+      <div class="mb-6 mt-20">
+        <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Part V</h2>
+        <h3 class="text-2xl font-bold text-white">Scaling</h3>
+      </div>
+
+      <!-- 16. Horizontal Scaling -->
+      <section id="horizontal" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">16</span>
+          Horizontal Scaling
+        </h4>
+        <div class="card rounded-xl p-6">
+          <p class="text-slate-300 mb-4">The entire compute layer is <strong class="text-white">stateless</strong>. No sticky sessions, no in-memory state, no local disk dependencies.</p>
+          <div class="grid md:grid-cols-3 gap-4 text-sm">
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-white font-semibold mb-2">Event Handlers</h5>
+              <p class="text-slate-400">Lambda auto-scales to 1000 concurrent. Each invocation is independent. No warm-up needed for event ingestion (lightweight, <100ms).</p>
+            </div>
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-white font-semibold mb-2">Agent Workers</h5>
+              <p class="text-slate-400">SQS concurrency controls how many agents run simultaneously. Start at 10, scale to 50+ as needed. Each worker is a Lambda that processes one SQS message.</p>
+            </div>
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-white font-semibold mb-2">Cron Dispatcher</h5>
+              <p class="text-slate-400">Single Lambda, runs every minute, fans out to SQS. If org count grows past 10K, shard the dispatcher by org_id range. Not a concern until then.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 17. Cold Starts -->
+      <section id="cold-starts" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">17</span>
+          Cold Start Optimization
+        </h4>
+        <div class="card rounded-xl p-6">
+          <p class="text-slate-300 mb-4">Cold starts matter for <strong class="text-white">Slack event handlers</strong> (must respond within 3 seconds) but not for agent workers (async, no user waiting).</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="text-left px-4 py-3 text-slate-300 font-semibold rounded-tl-lg">Strategy</th>
+                  <th class="text-left px-4 py-3 text-slate-300 font-semibold">Applied To</th>
+                  <th class="text-left px-4 py-3 text-slate-300 font-semibold rounded-tr-lg">Impact</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-4 py-2 text-white">Minimal bundle size</td><td class="px-4 py-2">Event handlers</td><td class="px-4 py-2">esbuild tree-shaking, ~2MB deploy package</td></tr>
+                <tr><td class="px-4 py-2 text-white">Provisioned concurrency</td><td class="px-4 py-2">Event handlers</td><td class="px-4 py-2">5 warm instances, ~$15/mo — eliminates P99 cold starts</td></tr>
+                <tr><td class="px-4 py-2 text-white">Lazy imports</td><td class="px-4 py-2">Agent workers</td><td class="px-4 py-2">LLM SDK loaded on first use, not at module level</td></tr>
+                <tr><td class="px-4 py-2 text-white">Connection reuse</td><td class="px-4 py-2">All Lambdas</td><td class="px-4 py-2">DB and Redis connections persisted across warm invocations</td></tr>
+                <tr><td class="px-4 py-2 text-white">ARM64 (Graviton)</td><td class="px-4 py-2">All Lambdas</td><td class="px-4 py-2">20% cheaper, 10-15% faster cold starts vs x86</td></tr>
+                <tr><td class="px-4 py-2 text-white">Node.js 20 snapshots</td><td class="px-4 py-2">Event handlers</td><td class="px-4 py-2">SnapStart (if available) reduces init from ~800ms to ~200ms</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 18. Connection Pooling -->
+      <section id="connection-pooling" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">18</span>
+          Connection Pooling — Postgres
+        </h4>
+        <div class="card rounded-xl p-6">
+          <p class="text-slate-300 mb-4">Lambda + Postgres is a known pain point. Without pooling, N concurrent Lambdas = N connections, easily exceeding Postgres limits.</p>
+          <div class="arch-diagram rounded-lg p-4 text-sm mb-4">
+<pre class="text-slate-400">
+<span class="text-red-400">Without pooling:</span>
+  50 Lambdas × 1 connection each = 50 connections
+  Spike to 200 concurrent = 💥 connection limit exceeded
+
+<span class="text-emerald-400">With RDS Proxy (our approach):</span>
+  200 Lambdas → RDS Proxy (connection pool) → Postgres
+                    │
+                    ├── Max 50 DB connections maintained
+                    ├── Multiplexes Lambda connections
+                    ├── Connection pinning for SET LOCAL (RLS)
+                    └── Automatic failover on DB restart
+
+<span class="text-emerald-400">Configuration:</span>
+  RDS Proxy max connections:  50  (80% of db.t4g.medium limit)
+  Lambda reserved concurrency: 60  (agent workers)
+  Idle timeout:               5 minutes
+  Connection borrow timeout:  30 seconds
+</pre>
+          </div>
+          <div class="bg-orange-500/5 border border-orange-500/20 rounded-lg p-4 text-sm">
+            <p class="text-orange-300"><strong>RLS + RDS Proxy gotcha:</strong> <code class="text-orange-400 font-mono text-xs">SET LOCAL</code> requires transaction-level pinning. RDS Proxy supports this but it reduces multiplexing efficiency. We mitigate by keeping transactions short and using <code class="text-orange-400 font-mono text-xs">SET LOCAL</code> (transaction-scoped, not session-scoped).</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 19. Cost Projections -->
+      <section id="cost-projections" class="mb-12">
+        <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span class="text-orange-400 font-mono text-sm">19</span>
+          Cost Projections
+        </h4>
+        <div class="card rounded-xl p-6">
+          <p class="text-slate-300 mb-4">Estimated monthly AWS infrastructure costs (excluding LLM tokens, which are usage-based and billed separately):</p>
+          <div class="overflow-x-auto mb-4">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="text-left px-4 py-3 text-slate-300 font-semibold rounded-tl-lg">Component</th>
+                  <th class="text-right px-4 py-3 text-slate-300 font-semibold">10 Orgs</th>
+                  <th class="text-right px-4 py-3 text-slate-300 font-semibold">100 Orgs</th>
+                  <th class="text-right px-4 py-3 text-slate-300 font-semibold rounded-tr-lg">1,000 Orgs</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-4 py-2 text-white">RDS (Postgres)</td><td class="text-right px-4 py-2">$65</td><td class="text-right px-4 py-2">$130</td><td class="text-right px-4 py-2">$450</td></tr>
+                <tr><td class="px-4 py-2 text-white">RDS Proxy</td><td class="text-right px-4 py-2">$22</td><td class="text-right px-4 py-2">$22</td><td class="text-right px-4 py-2">$45</td></tr>
+                <tr><td class="px-4 py-2 text-white">ElastiCache (Redis)</td><td class="text-right px-4 py-2">$15</td><td class="text-right px-4 py-2">$15</td><td class="text-right px-4 py-2">$55</td></tr>
+                <tr><td class="px-4 py-2 text-white">Lambda Compute</td><td class="text-right px-4 py-2">$8</td><td class="text-right px-4 py-2">$45</td><td class="text-right px-4 py-2">$350</td></tr>
+                <tr><td class="px-4 py-2 text-white">API Gateway</td><td class="text-right px-4 py-2">$3</td><td class="text-right px-4 py-2">$12</td><td class="text-right px-4 py-2">$85</td></tr>
+                <tr><td class="px-4 py-2 text-white">SQS</td><td class="text-right px-4 py-2">$1</td><td class="text-right px-4 py-2">$3</td><td class="text-right px-4 py-2">$15</td></tr>
+                <tr><td class="px-4 py-2 text-white">S3 + CloudWatch</td><td class="text-right px-4 py-2">$5</td><td class="text-right px-4 py-2">$15</td><td class="text-right px-4 py-2">$60</td></tr>
+                <tr><td class="px-4 py-2 text-white">Provisioned Concurrency</td><td class="text-right px-4 py-2">$15</td><td class="text-right px-4 py-2">$15</td><td class="text-right px-4 py-2">$45</td></tr>
+                <tr class="border-t border-slate-600/30">
+                  <td class="px-4 py-3 text-white font-bold">Total Infrastructure</td>
+                  <td class="text-right px-4 py-3 text-orange-400 font-bold">~$134</td>
+                  <td class="text-right px-4 py-3 text-orange-400 font-bold">~$257</td>
+                  <td class="text-right px-4 py-3 text-orange-400 font-bold">~$1,105</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-2 text-slate-500">Per-org infra cost</td>
+                  <td class="text-right px-4 py-2 text-slate-500">$13.40</td>
+                  <td class="text-right px-4 py-2 text-slate-500">$2.57</td>
+                  <td class="text-right px-4 py-2 text-slate-500">$1.11</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="grid md:grid-cols-3 gap-4 text-sm">
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-orange-400 font-semibold mb-1">10 Orgs</h5>
+              <p class="text-slate-400">Shared db.t4g.medium, single Redis node, minimal Lambda usage. Fixed costs dominate. Per-org cost is high but total is low.</p>
+            </div>
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-orange-400 font-semibold mb-1">100 Orgs</h5>
+              <p class="text-slate-400">Upgrade to db.t4g.large, Lambda costs grow linearly. Per-org cost drops 80%. Sweet spot for early scaling.</p>
+            </div>
+            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-700/30">
+              <h5 class="text-orange-400 font-semibold mb-1">1,000 Orgs</h5>
+              <p class="text-slate-400">Multi-AZ Postgres, larger Redis, higher Lambda concurrency. Consider read replicas. Per-org cost under $1.11 — excellent unit economics.</p>
+            </div>
+          </div>
+          <div class="bg-purple-500/5 border border-purple-500/20 rounded-lg p-4 text-sm mt-4">
+            <p class="text-purple-300"><strong>LLM costs (not included above):</strong> Estimated at $5–15/org/month depending on agent frequency and model (Claude Haiku for routine, Sonnet for complex reasoning). At 1,000 orgs, LLM costs ($5K–15K/mo) will dwarf infrastructure costs ($1.1K/mo). Optimize model selection aggressively.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer class="mt-20 pt-8 border-t border-slate-800/50">
+        <div class="flex items-center justify-between text-sm text-slate-500">
+          <a href="brev-operator.html" class="text-orange-400 hover:text-orange-300 transition-colors flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            Back to Planning Doc
+          </a>
+          <span>Brev Operator · Architecture Deep Dive · 2026</span>
+        </div>
+      </footer>
+
+    </main>
+  </div>
+
+  <!-- Scroll spy for active nav -->
+  <script>
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.nav-link');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          navLinks.forEach(link => link.classList.remove('active'));
+          const active = document.querySelector(`.nav-link[href="#${entry.target.id}"]`);
+          if (active) active.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -80% 0px' });
+    sections.forEach(section => observer.observe(section));
+  </script>
+
+</body>
+</html>
