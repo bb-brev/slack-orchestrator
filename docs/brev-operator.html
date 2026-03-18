@@ -1222,13 +1222,234 @@
           <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">14</span>
           Open Questions
         </h2>
-        <div class="space-y-3">
-          <div class="card rounded-xl p-5"><div class="flex items-start gap-3"><span class="text-orange-400 font-mono text-sm font-bold mt-0.5">Q1</span><div><h4 class="text-sm font-semibold text-white mb-1">Pricing model?</h4><p class="text-xs text-slate-400">Per-seat (like Brev today)? Per-org flat fee? Usage-based (actions/tokens)? Tiered by autonomy level?</p><p class="text-xs text-slate-500 mt-1"><strong class="text-orange-400">Rec:</strong> Add-on to existing Brev seat pricing. "Brev Pro + Operator" tier. Usage caps per tier.</p></div></div></div>
-          <div class="card rounded-xl p-5"><div class="flex items-start gap-3"><span class="text-orange-400 font-mono text-sm font-bold mt-0.5">Q2</span><div><h4 class="text-sm font-semibold text-white mb-1">Should the Operator DM people or only work in channels?</h4><p class="text-xs text-slate-400">DMs are more actionable. Channels are more transparent. Some things (personal check-ins) feel weird in public.</p><p class="text-xs text-slate-500 mt-1"><strong class="text-orange-400">Rec:</strong> Both. DMs for personal follow-ups (check-ins, deadlines). Channels for team-level reports and escalations. Configurable per org.</p></div></div></div>
-          <div class="card rounded-xl p-5"><div class="flex items-start gap-3"><span class="text-orange-400 font-mono text-sm font-bold mt-0.5">Q3</span><div><h4 class="text-sm font-semibold text-white mb-1">How much autonomy on day one?</h4><p class="text-xs text-slate-400">Ship conservative (everything requires approval) and unlock autonomy over time? Or ship with smart defaults?</p><p class="text-xs text-slate-500 mt-1"><strong class="text-orange-400">Rec:</strong> Conservative start. Read is autonomous. All writes require approval. Unlock per-action autonomy as trust builds.</p></div></div></div>
-          <div class="card rounded-xl p-5"><div class="flex items-start gap-3"><span class="text-orange-400 font-mono text-sm font-bold mt-0.5">Q4</span><div><h4 class="text-sm font-semibold text-white mb-1">Operator personality per org?</h4><p class="text-xs text-slate-400">Should each org be able to customize the Operator's tone, aggressiveness, and communication style?</p><p class="text-xs text-slate-500 mt-1"><strong class="text-orange-400">Rec:</strong> v1: one personality. v2: org-level customization (formal vs. casual, aggressive vs. gentle follow-ups).</p></div></div></div>
-          <div class="card rounded-xl p-5"><div class="flex items-start gap-3"><span class="text-orange-400 font-mono text-sm font-bold mt-0.5">Q5</span><div><h4 class="text-sm font-semibold text-white mb-1">Should the Operator surface in the Brev web app too?</h4><p class="text-xs text-slate-400">Slack-first doesn't mean Slack-only. Should there be an Operator activity feed in the Brev dashboard?</p><p class="text-xs text-slate-500 mt-1"><strong class="text-orange-400">Rec:</strong> Yes — audit trail in Brev showing all Operator actions, decisions, and outcomes. Slack is the interaction layer; Brev is the record layer.</p></div></div></div>
-          <div class="card rounded-xl p-5"><div class="flex items-start gap-3"><span class="text-orange-400 font-mono text-sm font-bold mt-0.5">Q6</span><div><h4 class="text-sm font-semibold text-white mb-1">What happens when someone ignores the Operator?</h4><p class="text-xs text-slate-400">If a follow-up gets no response after 24h, 48h, a week — what's the escalation path?</p><p class="text-xs text-slate-500 mt-1"><strong class="text-orange-400">Rec:</strong> Configurable escalation chain: thread reply → DM → manager notification → skip + flag in weekly report. Never more than 3 touches per item.</p></div></div></div>
+        <p class="text-sm text-slate-400 mb-6">Each question below has been researched and answered with rationale, competitive analysis, and implementation guidance.</p>
+        <div class="space-y-4">
+
+          <!-- Q1: Pricing -->
+          <details class="card rounded-xl overflow-hidden" open>
+            <summary class="flex items-center gap-3 px-6 py-4 hover:bg-slate-800/30 transition-colors cursor-pointer">
+              <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+              <span class="text-orange-400 font-mono text-sm font-bold">Q1</span>
+              <span class="font-semibold text-white text-sm">Pricing Model — Per-seat, per-org, or usage-based?</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2 space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-white mb-2">Research: How competitors price</h4>
+                <p class="text-xs text-slate-400">The OKR/performance management market prices per-seat-per-month: Lattice ($6–11), 15Five ($4–14), Betterworks ($8–15), Quantive ($10–18). AI-agent products like Viktor charge $20–50/user/mo. Pure usage-based pricing (per action, per token) creates unpredictable bills that enterprise buyers hate — every procurement team we'd sell to wants a predictable line item.</p>
+              </div>
+              <div>
+                <h4 class="text-xs font-semibold text-emerald-400 mb-2">Recommendation: Per-seat add-on tier</h4>
+                <p class="text-xs text-slate-400"><strong class="text-white">Brev Pro + Operator: $22–28/user/mo</strong> (a $10–16 premium over Brev Pro at $12/user/mo). This prices the Operator below a fractional ops hire ($80K–150K/yr for coordination work at a 50-person company) while keeping the pricing simple and predictable. Usage caps per tier prevent runaway AI costs: e.g., 500 Operator actions/org/month on standard, 2000 on enterprise.</p>
+                <p class="text-xs text-slate-400 mt-2"><strong class="text-slate-300">Why not pure usage-based:</strong> Usage pricing works for developer tools (Stripe, Twilio) where the buyer is technical and understands per-call economics. Brev sells to ops leaders and executives who need a budget-friendly line item. Per-seat is how every competitor prices, so procurement teams expect it.</p>
+                <p class="text-xs text-slate-400 mt-2"><strong class="text-slate-300">Enterprise:</strong> Custom pricing for 500+ seats. Includes dedicated agent tuning, SSO/SCIM, custom integrations, SLA, and priority support.</p>
+              </div>
+            </div>
+          </details>
+
+          <!-- Q2: DM vs Channel -->
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center gap-3 px-6 py-4 hover:bg-slate-800/30 transition-colors cursor-pointer">
+              <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+              <span class="text-orange-400 font-mono text-sm font-bold">Q2</span>
+              <span class="font-semibold text-white text-sm">DMs vs. channels — where should the Operator talk?</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2 space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-white mb-2">Research: Communication patterns in ops tools</h4>
+                <p class="text-xs text-slate-400">Slack's own data shows DMs have 2–3× higher engagement rates than channel posts. But DMs create silos — managers can't see if their reports are engaging. 15Five and Lattice both use email DMs for check-in prompts (private) but post summaries to shared views (transparent). The best ops tools split by intent: <em>personal accountability</em> in private, <em>team visibility</em> in public.</p>
+              </div>
+              <div>
+                <h4 class="text-xs font-semibold text-emerald-400 mb-2">Recommendation: Intent-based routing with defaults</h4>
+                <div class="overflow-x-auto mt-2">
+                  <table class="w-full text-xs">
+                    <thead><tr class="text-left text-slate-400"><th class="px-3 py-2">Message Type</th><th class="px-3 py-2">Default Surface</th><th class="px-3 py-2">Rationale</th></tr></thead>
+                    <tbody class="text-slate-400">
+                      <tr><td class="px-3 py-2 text-white">Check-in drafts</td><td class="px-3 py-2 text-blue-400">DM</td><td class="px-3 py-2">Personal, may contain sensitive performance data. User reviews privately before it goes on record.</td></tr>
+                      <tr><td class="px-3 py-2 text-white">Follow-ups on commitments</td><td class="px-3 py-2 text-blue-400">DM (1st touch) → Thread (2nd)</td><td class="px-3 py-2">First follow-up is private. If no response, escalate to the thread where the commitment was made — adds social accountability.</td></tr>
+                      <tr><td class="px-3 py-2 text-white">Weekly digests</td><td class="px-3 py-2 text-green-400">Channel (#leadership, #team-x)</td><td class="px-3 py-2">Team/company-wide visibility. Everyone should see the same report.</td></tr>
+                      <tr><td class="px-3 py-2 text-white">Risk escalations</td><td class="px-3 py-2 text-blue-400">DM to decision-maker</td><td class="px-3 py-2">Decision-maker needs to act without public pressure. If no response in 24h, escalate to channel.</td></tr>
+                      <tr><td class="px-3 py-2 text-white">Meeting agendas</td><td class="px-3 py-2 text-green-400">Channel thread or Canvas</td><td class="px-3 py-2">All attendees need access before the meeting.</td></tr>
+                      <tr><td class="px-3 py-2 text-white">Approval prompts</td><td class="px-3 py-2 text-blue-400">DM</td><td class="px-3 py-2">Approval is a personal action. Don't force public approve/reject.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p class="text-xs text-slate-500 mt-2">All defaults configurable per org. Admins can set a "transparency level": private (all DMs), balanced (default above), or open (all in channels).</p>
+              </div>
+            </div>
+          </details>
+
+          <!-- Q3: Autonomy -->
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center gap-3 px-6 py-4 hover:bg-slate-800/30 transition-colors cursor-pointer">
+              <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+              <span class="text-orange-400 font-mono text-sm font-bold">Q3</span>
+              <span class="font-semibold text-white text-sm">How much autonomy on day one?</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2 space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-white mb-2">Research: Trust calibration in AI agents</h4>
+                <p class="text-xs text-slate-400">Every successful AI assistant product (GitHub Copilot, Cursor, Notion AI) follows the same trust arc: start with suggestions, graduate to autonomous actions as the user builds confidence. The research on automation trust (Lee & See, 2004) shows that overtrust is as dangerous as undertrust — users who over-rely on AI stop verifying outputs. The key is <em>calibrated trust</em>: the user understands exactly what the AI will do autonomously vs. what requires approval.</p>
+                <p class="text-xs text-slate-400 mt-2">Critically, 83% of companies report positive OKR impact — but only with consistent use. If the Operator requires too much approval overhead, adoption drops and we're back to "tool that nobody uses." The right balance: automate the tedious (data gathering, drafting), require approval for the consequential (submitting, reassigning).</p>
+              </div>
+              <div>
+                <h4 class="text-xs font-semibold text-emerald-400 mb-2">Recommendation: Three-tier autonomy with progressive unlocking</h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+                  <div class="bg-emerald-500/5 rounded-lg p-3 border border-emerald-500/10">
+                    <h5 class="text-xs font-semibold text-emerald-400 mb-2">Always Autonomous (Day 1)</h5>
+                    <ul class="text-xs text-slate-400 space-y-1">
+                      <li>• Read all Brev data (goals, KPIs, cadences)</li>
+                      <li>• Pull data from integrations</li>
+                      <li>• Draft check-ins and reports</li>
+                      <li>• Generate meeting agendas</li>
+                      <li>• Surface risks and insights</li>
+                      <li>• Send follow-up messages</li>
+                      <li>• Update Home Tab dashboards</li>
+                    </ul>
+                  </div>
+                  <div class="bg-orange-500/5 rounded-lg p-3 border border-orange-500/10">
+                    <h5 class="text-xs font-semibold text-orange-400 mb-2">Draft + Approve (Day 1, unlock later)</h5>
+                    <ul class="text-xs text-slate-400 space-y-1">
+                      <li>• Submit check-ins (draft → user approves)</li>
+                      <li>• Update goal status</li>
+                      <li>• Create action items from meetings</li>
+                      <li>• Escalate blockers to decision-makers</li>
+                      <li>• Propose reassignments</li>
+                    </ul>
+                    <p class="text-xs text-slate-500 mt-2">After 10 consecutive approvals without edits, offer to auto-approve that action type.</p>
+                  </div>
+                  <div class="bg-red-500/5 rounded-lg p-3 border border-red-500/10">
+                    <h5 class="text-xs font-semibold text-red-400 mb-2">Always Requires Approval</h5>
+                    <ul class="text-xs text-slate-400 space-y-1">
+                      <li>• Delete or archive goals</li>
+                      <li>• Change goal owners across teams</li>
+                      <li>• Modify KPI targets</li>
+                      <li>• Alter org structure</li>
+                      <li>• Send messages on behalf of a user</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <!-- Q4: Personality -->
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center gap-3 px-6 py-4 hover:bg-slate-800/30 transition-colors cursor-pointer">
+              <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+              <span class="text-orange-400 font-mono text-sm font-bold">Q4</span>
+              <span class="font-semibold text-white text-sm">Should the Operator's personality be customizable per org?</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2 space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-white mb-2">Research: Tone in workplace AI</h4>
+                <p class="text-xs text-slate-400">Microsoft's research on Copilot adoption found that tone mismatch is one of the top reasons users disengage with AI assistants. A startup with a casual Slack culture will reject corporate-speak. An enterprise with compliance requirements needs formal, precise language. Intercom and Drift both offer per-workspace tone customization for their AI chatbots — it's table stakes for multi-tenant B2B AI products.</p>
+                <p class="text-xs text-slate-400 mt-2">However, personality customization is a v2 feature. The v1 risk is getting the <em>default</em> personality wrong and losing users before they try customization. The default must be: professional but warm, direct but not abrupt, helpful but not obsequious.</p>
+              </div>
+              <div>
+                <h4 class="text-xs font-semibold text-emerald-400 mb-2">Recommendation: Ship one great default, add customization in v2</h4>
+                <p class="text-xs text-slate-400"><strong class="text-white">v1 personality:</strong> Confident, direct, context-rich. Modeled on the best Chief of Staff you've worked with — the one who shows up with the data already pulled, the options already framed, and the follow-up already drafted. Not chatty. Not robotic. Professional with a hint of warmth.</p>
+                <p class="text-xs text-slate-400 mt-2"><strong class="text-white">v2 customization axes:</strong></p>
+                <ul class="text-xs text-slate-400 mt-1 space-y-1 pl-4">
+                  <li>• <strong>Formality:</strong> casual ↔ formal (affects word choice, emoji use, message length)</li>
+                  <li>• <strong>Assertiveness:</strong> gentle ↔ direct (affects follow-up intensity, escalation speed)</li>
+                  <li>• <strong>Verbosity:</strong> concise ↔ detailed (affects report depth, context inclusion)</li>
+                  <li>• <strong>Proactivity:</strong> conservative ↔ aggressive (affects how often the Operator initiates)</li>
+                </ul>
+                <p class="text-xs text-slate-400 mt-2">Implemented via system prompt tuning per org — stored in the org's Operator config. Admin configures via Slack modal (<code>/brev settings</code>) or Brev web dashboard.</p>
+              </div>
+            </div>
+          </details>
+
+          <!-- Q5: Web App -->
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center gap-3 px-6 py-4 hover:bg-slate-800/30 transition-colors cursor-pointer">
+              <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+              <span class="text-orange-400 font-mono text-sm font-bold">Q5</span>
+              <span class="font-semibold text-white text-sm">Should the Operator surface in the Brev web app too?</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2 space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-white mb-2">Research: Multi-surface AI in B2B</h4>
+                <p class="text-xs text-slate-400">Every B2B AI product that started in one surface eventually expanded. GitHub Copilot went from VS Code to CLI to web. Notion AI lives in both the editor and sidebar. Intercom's AI started in chat widgets, now appears in inbox, help center, and reporting. The pattern: the AI does its work in the user's flow (Slack), but the record lives in the system of record (Brev web app).</p>
+                <p class="text-xs text-slate-400 mt-2">Crucially, admins and executives need oversight — "what has the Operator been doing?" This can't live only in Slack threads. An audit trail in the web app is a compliance requirement for enterprise customers.</p>
+              </div>
+              <div>
+                <h4 class="text-xs font-semibold text-emerald-400 mb-2">Recommendation: Yes — Slack is interaction, Brev web is record</h4>
+                <p class="text-xs text-slate-400"><strong class="text-white">Brev web app additions:</strong></p>
+                <ul class="text-xs text-slate-400 mt-1 space-y-1 pl-4">
+                  <li>• <strong>Operator Activity Feed:</strong> Timeline of all Operator actions — what it did, why, what triggered it, outcome. Filterable by team, user, action type.</li>
+                  <li>• <strong>Operator Dashboard:</strong> Aggregate metrics — tasks completed, check-ins submitted, follow-ups resolved, approval rate, time saved.</li>
+                  <li>• <strong>Operator Settings:</strong> Admin panel for org-wide Operator configuration — autonomy levels, channel routing, personality, active hours, mute rules.</li>
+                  <li>• <strong>Deep Links:</strong> Every Operator message in Slack includes a "View in Brev" link that opens the relevant context in the web app (goal detail, check-in, report).</li>
+                </ul>
+                <p class="text-xs text-slate-400 mt-2"><strong class="text-white">Not in v1:</strong> A full chat-with-Operator experience in the web app. Slack is the primary interaction surface. The web app is for oversight, configuration, and record-keeping. This avoids building two chat UIs and keeps the team focused.</p>
+              </div>
+            </div>
+          </details>
+
+          <!-- Q6: Ignoring the Operator -->
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center gap-3 px-6 py-4 hover:bg-slate-800/30 transition-colors cursor-pointer">
+              <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+              <span class="text-orange-400 font-mono text-sm font-bold">Q6</span>
+              <span class="font-semibold text-white text-sm">What happens when someone ignores the Operator?</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2 space-y-3">
+              <div>
+                <h4 class="text-xs font-semibold text-white mb-2">Research: Escalation design in ops tools</h4>
+                <p class="text-xs text-slate-400">PagerDuty's escalation research shows the optimal pattern: 3 touches max before escalation. Each touch adds urgency and context. After the 3rd touch, escalate to the next person in the chain — never continue nagging the same person. Jira's SLA engine follows a similar pattern: warn → breach → escalate. The worst possible behavior is infinite reminders — it teaches users to ignore all messages from the tool.</p>
+                <p class="text-xs text-slate-400 mt-2">Crucially, non-response is itself a signal. If someone consistently ignores check-in prompts, the Operator should learn this pattern and suggest: (1) auto-completing from available data, (2) reassigning ownership, or (3) flagging to a manager — not sending a 5th reminder.</p>
+              </div>
+              <div>
+                <h4 class="text-xs font-semibold text-emerald-400 mb-2">Recommendation: 3-touch escalation with smart adaptation</h4>
+                <div class="bg-slate-800/30 rounded-lg p-4 mt-2">
+                  <div class="space-y-3 text-xs">
+                    <div class="flex items-start gap-3">
+                      <span class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-mono text-xs flex-shrink-0">1</span>
+                      <div>
+                        <p class="text-slate-300 font-medium">Touch 1: DM with drafted artifact (Day 0)</p>
+                        <p class="text-slate-500">"Hey @mike, here's your Q2 pipeline check-in draft based on HubSpot data. Approve, edit, or dismiss." Includes pre-filled data so the user just has to click a button.</p>
+                      </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                      <span class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-mono text-xs flex-shrink-0">2</span>
+                      <div>
+                        <p class="text-slate-300 font-medium">Touch 2: Thread nudge with added context (Day 2)</p>
+                        <p class="text-slate-500">"Quick bump — this check-in covers a goal that's been At Risk for 2 weeks. Your team's QBR is Thursday and this data would be helpful for the review." Adds urgency and social context.</p>
+                      </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                      <span class="w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center text-red-400 font-mono text-xs flex-shrink-0">3</span>
+                      <div>
+                        <p class="text-slate-300 font-medium">Touch 3: Escalate + flag (Day 5)</p>
+                        <p class="text-slate-500">Operator notifies the manager: "@sarah, @mike's Q2 pipeline check-in has been pending for 5 days. Options: (1) I submit what I have from HubSpot data, (2) reassign to another team member, (3) skip this cycle." Simultaneously flagged in the weekly report as "unresolved."</p>
+                      </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                      <span class="w-6 h-6 rounded-full bg-slate-500/20 flex items-center justify-center text-slate-400 font-mono text-xs flex-shrink-0">∅</span>
+                      <div>
+                        <p class="text-slate-300 font-medium">After Touch 3: Stop. Learn. Report.</p>
+                        <p class="text-slate-500">No more messages about this item. Log the non-response. Include in weekly/quarterly analysis: "@mike responded to 2 of 8 check-in prompts this quarter." This data becomes the basis for org-level insights on engagement and process fit.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p class="text-xs text-slate-500 mt-3">Timing, escalation chain, and max touches are all configurable per org. Default: 3 touches over 5 days.</p>
+              </div>
+            </div>
+          </details>
+
+        </div>
+
+        <!-- Link to Slack Deep Dive -->
+        <div class="card rounded-xl p-5 mt-6 border-purple-500/20 bg-purple-500/5">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-sm font-semibold text-white mb-1">📖 Slack API Deep Dive</h4>
+              <p class="text-xs text-slate-400">Full breakdown of every Slack surface, API method, Block Kit component, AI feature, scope, and rate limit — mapped to Brev Operator use cases.</p>
+            </div>
+            <a href="slack-deep-dive.html" class="px-4 py-2 rounded-lg bg-purple-500/20 text-purple-400 text-sm font-semibold hover:bg-purple-500/30 transition-colors whitespace-nowrap">View Deep Dive →</a>
+          </div>
         </div>
       </section>
 

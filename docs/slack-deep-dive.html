@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Slack API Deep Dive — Brev Operator Portal Architecture</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwindcss.config = {
+      theme: {
+        extend: {
+          colors: { slate: { 850: '#172033', 950: '#0a0f1a' } },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body { background: #0a0f1a; }
+    .gradient-text { background: linear-gradient(135deg, #611f69, #e01e5a, #36c5f0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(100, 116, 139, 0.2); backdrop-filter: blur(12px); transition: border-color 0.2s; }
+    .card:hover { border-color: rgba(97, 31, 105, 0.4); }
+    .glow { box-shadow: 0 0 60px rgba(97, 31, 105, 0.08); }
+    .slack-purple { color: #611f69; }
+    .slack-green { color: #2eb67d; }
+    .slack-blue { color: #36c5f0; }
+    .slack-red { color: #e01e5a; }
+    .slack-yellow { color: #ecb22e; }
+    .nav-link.active { color: #e01e5a; border-left-color: #e01e5a; }
+    details summary::-webkit-details-marker { display: none; }
+    details[open] summary .chevron { transform: rotate(90deg); }
+    .tag { font-size: 0.65rem; padding: 2px 8px; border-radius: 9999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .tag-surface { background: rgba(54, 197, 240, 0.15); color: #36c5f0; border: 1px solid rgba(54, 197, 240, 0.3); }
+    .tag-api { background: rgba(46, 182, 125, 0.15); color: #2eb67d; border: 1px solid rgba(46, 182, 125, 0.3); }
+    .tag-event { background: rgba(224, 30, 90, 0.15); color: #e01e5a; border: 1px solid rgba(224, 30, 90, 0.3); }
+    .tag-new { background: rgba(236, 178, 46, 0.15); color: #ecb22e; border: 1px solid rgba(236, 178, 46, 0.3); }
+    .arch-diagram { background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(100, 116, 139, 0.2); font-family: 'JetBrains Mono', monospace; overflow-x: auto; }
+    table { border-collapse: separate; border-spacing: 0; }
+    th { background: rgba(30, 41, 59, 0.8); }
+    td, th { border-bottom: 1px solid rgba(100, 116, 139, 0.15); }
+    @media (max-width: 1024px) { .sidebar { display: none; } }
+    .surface-card { position: relative; overflow: hidden; }
+    .surface-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+    .surface-messages::before { background: linear-gradient(90deg, #36c5f0, #2eb67d); }
+    .surface-home::before { background: linear-gradient(90deg, #611f69, #e01e5a); }
+    .surface-modal::before { background: linear-gradient(90deg, #e01e5a, #ecb22e); }
+    .surface-split::before { background: linear-gradient(90deg, #ecb22e, #36c5f0); }
+    .surface-canvas::before { background: linear-gradient(90deg, #2eb67d, #611f69); }
+    .surface-slash::before { background: linear-gradient(90deg, #36c5f0, #611f69); }
+  </style>
+</head>
+<body class="text-slate-300 font-sans antialiased">
+
+  <!-- Header -->
+  <header class="fixed top-0 w-full z-50 border-b border-slate-800/50 bg-[#0a0f1a]/80 backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-purple-900/30 flex items-center justify-center">
+          <svg class="w-5 h-5 text-purple-400" viewBox="0 0 24 24" fill="currentColor"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.124 2.521a2.528 2.528 0 0 1 2.52-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.52V8.834zm-1.271 0a2.528 2.528 0 0 1-2.521 2.521 2.528 2.528 0 0 1-2.521-2.521V2.522A2.528 2.528 0 0 1 15.165 0a2.528 2.528 0 0 1 2.522 2.522v6.312zm-2.522 10.124a2.528 2.528 0 0 1 2.522 2.52A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.521-2.522v-2.52h2.521zm0-1.271a2.527 2.527 0 0 1-2.521-2.521 2.528 2.528 0 0 1 2.521-2.521h6.313A2.528 2.528 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.522h-6.313z"/></svg>
+        </div>
+        <span class="font-bold text-white text-lg">Slack API Deep Dive</span>
+        <span class="tag tag-surface ml-2">Brev Operator</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-slate-500">
+        <a href="brev-operator.html" class="text-indigo-400 hover:text-indigo-300">← Back to Planning Doc</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex">
+    <!-- Sidebar -->
+    <nav class="sidebar fixed left-0 top-16 bottom-0 w-56 border-r border-slate-800/50 bg-[#0a0f1a]/60 backdrop-blur-xl overflow-y-auto py-6 px-4 z-40">
+      <div class="space-y-1 text-sm">
+        <a href="#overview" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-pink-500/50 transition-all">Overview</a>
+        <a href="#surfaces" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-pink-500/50 transition-all">Surfaces</a>
+        <a href="#messages" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-pink-500/50 transition-all">Messages & Block Kit</a>
+        <a href="#app-home" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-pink-500/50 transition-all">App Home</a>
+        <a href="#modals" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-pink-500/50 transition-all">Modals</a>
+        <a href="#ai-features" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-pink-500/50 transition-all">AI Features</a>
+        <a href="#events" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-pink-500/50 transition-all">Events & Webhooks</a>
+        <a href="#slash" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-pink-500/50 transition-all">Slash Commands</a>
+        <a href="#scopes" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-pink-500/50 transition-all">Scopes & Permissions</a>
+        <a href="#portal-map" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-pink-500/50 transition-all">Brev Portal Map</a>
+        <a href="#rate-limits" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-pink-500/50 transition-all">Rate Limits</a>
+        <a href="#implementation" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-pink-500/50 transition-all">Implementation</a>
+      </div>
+    </nav>
+
+    <!-- Main -->
+    <main class="ml-0 lg:ml-56 flex-1 max-w-4xl mx-auto px-6 pt-28 pb-20">
+
+      <!-- Hero -->
+      <section class="mb-16">
+        <h1 class="text-4xl md:text-5xl font-black text-white leading-tight mb-4">
+          Slack as a<br><span class="gradient-text">Two-Way Brev Portal</span>
+        </h1>
+        <p class="text-lg text-slate-400 max-w-2xl mb-6">
+          A comprehensive breakdown of every Slack API surface, UI element, and interaction pattern available to build Brev Operator as a full-featured portal into the Brev platform.
+        </p>
+      </section>
+
+      <!-- Overview -->
+      <section id="overview" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">Slack App Architecture Overview</h2>
+        <div class="arch-diagram rounded-xl p-6 mb-6 text-xs leading-relaxed">
+<pre class="text-slate-400">
+┌──────────────────────────────────────────────────────────────────┐
+│                    <span class="text-purple-400">SLACK WORKSPACE</span>                              │
+│                                                                  │
+│  ┌────────────┐ ┌────────────┐ ┌──────────┐ ┌────────────────┐  │
+│  │ <span class="text-blue-400">Messages</span>   │ │ <span class="text-pink-400">App Home</span>   │ │ <span class="text-yellow-400">Modals</span>   │ │ <span class="text-cyan-400">Split View</span>     │  │
+│  │ Channels   │ │ Home Tab   │ │ Forms    │ │ AI Chat Pane   │  │
+│  │ DMs        │ │ Messages   │ │ Wizards  │ │ Side-by-Side   │  │
+│  │ Threads    │ │ About      │ │ Confirms │ │ Suggested Prmp │  │
+│  └─────┬──────┘ └─────┬──────┘ └────┬─────┘ └───────┬────────┘  │
+│        │               │             │               │            │
+│  ┌─────┴───────────────┴─────────────┴───────────────┴─────────┐ │
+│  │                    <span class="text-green-400">BLOCK KIT</span>                               │ │
+│  │  Sections · Actions · Inputs · Images · Context · Dividers  │ │
+│  │  Buttons · Selects · Date pickers · Overflow · Radio        │ │
+│  └─────────────────────────┬───────────────────────────────────┘ │
+│                            │                                      │
+│  ┌─────────────────────────┴───────────────────────────────────┐ │
+│  │                 <span class="text-red-400">INTERACTIVITY</span>                              │ │
+│  │  Shortcuts · Slash commands · Button clicks · Menu selects  │ │
+│  │  Modal submissions · Reaction events · Message actions      │ │
+│  └─────────────────────────┬───────────────────────────────────┘ │
+└────────────────────────────┼────────────────────────────────────┘
+                             │
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+          ▼                  ▼                  ▼
+   <span class="text-green-400">Events API</span>          <span class="text-blue-400">Web API</span>         <span class="text-yellow-400">Socket Mode</span>
+   <span class="text-slate-500">(push events)</span>      <span class="text-slate-500">(call methods)</span>    <span class="text-slate-500">(real-time WS)</span>
+          │                  │                  │
+          └──────────────────┼──────────────────┘
+                             │
+                             ▼
+                    ┌────────────────┐
+                    │ <span class="text-orange-400">BREV OPERATOR</span>  │
+                    │ <span class="text-slate-500">Backend</span>        │
+                    └────────────────┘
+</pre>
+        </div>
+      </section>
+
+      <!-- Surfaces -->
+      <section id="surfaces" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">All Available Slack Surfaces</h2>
+        <p class="text-sm text-slate-400 mb-6">Surfaces are places where the Brev Operator can express itself. Each surface has different capabilities, constraints, and ideal use cases for the Brev portal.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          <div class="card surface-card surface-messages rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="tag tag-surface">Primary</span>
+              <h3 class="font-semibold text-white text-sm">Messages</h3>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">Rich text messages in channels, DMs, and threads. Supports Block Kit layouts (up to 50 blocks per message), interactive components, file attachments, and unfurls.</p>
+            <div class="text-xs text-slate-500 space-y-1">
+              <p><strong class="text-slate-300">Brev use:</strong> Follow-ups, check-in drafts, risk alerts, weekly digests, approval prompts, question routing</p>
+              <p><strong class="text-slate-300">Key methods:</strong> <code class="text-blue-400">chat.postMessage</code>, <code class="text-blue-400">chat.update</code>, <code class="text-blue-400">chat.postEphemeral</code>, <code class="text-blue-400">chat.scheduleMessage</code></p>
+              <p><strong class="text-slate-300">Limits:</strong> 50 blocks/msg, 40K chars text, 1 msg/sec/channel (Tier 3)</p>
+            </div>
+          </div>
+
+          <div class="card surface-card surface-home rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="tag tag-surface">Dashboard</span>
+              <h3 class="font-semibold text-white text-sm">App Home (Home Tab)</h3>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">A persistent, per-user view that lives under the Brev bot in the sidebar. Up to 100 blocks. Always accessible, retains state until the app updates it. Fully customizable per user.</p>
+            <div class="text-xs text-slate-500 space-y-1">
+              <p><strong class="text-slate-300">Brev use:</strong> Personal dashboard — my goals, my check-ins due, my action items, pending approvals, Operator activity log</p>
+              <p><strong class="text-slate-300">Key method:</strong> <code class="text-blue-400">views.publish</code> (publishes/updates the Home tab for a specific user)</p>
+              <p><strong class="text-slate-300">Limits:</strong> 100 blocks, no input blocks (use modals for forms)</p>
+            </div>
+          </div>
+
+          <div class="card surface-card surface-modal rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="tag tag-surface">Forms</span>
+              <h3 class="font-semibold text-white text-sm">Modals</h3>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">Pop-up dialogs that capture focus. Support input fields, select menus, date pickers, radio buttons. Can chain up to 3 views in a view stack for multi-step wizards.</p>
+            <div class="text-xs text-slate-500 space-y-1">
+              <p><strong class="text-slate-300">Brev use:</strong> Create/edit goals, submit check-ins, configure Operator settings, approve/reject actions with notes, multi-step wizards</p>
+              <p><strong class="text-slate-300">Key methods:</strong> <code class="text-blue-400">views.open</code>, <code class="text-blue-400">views.update</code>, <code class="text-blue-400">views.push</code></p>
+              <p><strong class="text-slate-300">Trigger:</strong> Requires a <code class="text-pink-400">trigger_id</code> — can only open in response to user interaction (button click, slash command, shortcut)</p>
+            </div>
+          </div>
+
+          <div class="card surface-card surface-split rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="tag tag-new">AI-Native</span>
+              <h3 class="font-semibold text-white text-sm">Split View (AI Pane)</h3>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">Side-by-side AI chat experience. User talks to the Operator in a pane while viewing channels/threads on the other side. Includes suggested prompts, loading states, and text streaming.</p>
+            <div class="text-xs text-slate-500 space-y-1">
+              <p><strong class="text-slate-300">Brev use:</strong> Natural language queries ("what's at risk this week?"), conversational goal creation, deep-dive analysis, ad-hoc reports</p>
+              <p><strong class="text-slate-300">Key methods:</strong> <code class="text-blue-400">assistant.threads.setStatus</code>, <code class="text-blue-400">assistant.threads.setSuggestedPrompts</code>, <code class="text-blue-400">chat.startStream</code>/<code class="text-blue-400">appendStream</code>/<code class="text-blue-400">stopStream</code></p>
+              <p><strong class="text-slate-300">Requires:</strong> Agents & AI Apps toggle + <code class="text-pink-400">assistant:write</code> scope. Paid Slack plan.</p>
+            </div>
+          </div>
+
+          <div class="card surface-card surface-canvas rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="tag tag-surface">Documents</span>
+              <h3 class="font-semibold text-white text-sm">Canvases</h3>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">Built-in documents in Slack. Can be attached to channels or standalone. Support markdown, links, videos, and workflow triggers. Persistent and collaborative.</p>
+            <div class="text-xs text-slate-500 space-y-1">
+              <p><strong class="text-slate-300">Brev use:</strong> Meeting agendas, weekly reports, quarterly reviews, onboarding guides, team dashboards — long-form artifacts that persist</p>
+              <p><strong class="text-slate-300">Note:</strong> Different from Block Kit — uses markdown formatting. Good for generated reports that need to live beyond a message.</p>
+            </div>
+          </div>
+
+          <div class="card surface-card surface-slash rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="tag tag-surface">Quick Access</span>
+              <h3 class="font-semibold text-white text-sm">Slash Commands</h3>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">User types <code class="text-blue-400">/brev</code> + subcommand in the message composer. Instant access to any Brev action from any channel.</p>
+            <div class="text-xs text-slate-500 space-y-1">
+              <p><strong class="text-slate-300">Brev use:</strong> <code>/brev goals</code>, <code>/brev checkin</code>, <code>/brev risk</code>, <code>/brev assign @user goal-name</code>, <code>/brev report</code></p>
+              <p><strong class="text-slate-300">Response:</strong> Can respond with ephemeral message (only sender sees), channel message, or trigger a modal</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Messages & Block Kit -->
+      <section id="messages" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">Messages & Block Kit — The Primary Portal Surface</h2>
+
+        <div class="card rounded-xl p-6 mb-4">
+          <h3 class="text-white font-semibold mb-4">Message Types for Brev Operator</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left text-slate-400">
+                  <th class="px-3 py-2">Message Type</th>
+                  <th class="px-3 py-2">Method</th>
+                  <th class="px-3 py-2">Visibility</th>
+                  <th class="px-3 py-2">Brev Use Case</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-3 py-2 font-medium text-white">Channel message</td><td class="px-3 py-2 font-mono text-blue-400">chat.postMessage</td><td class="px-3 py-2">Everyone in channel</td><td class="px-3 py-2">Weekly digests, team risk reports, announcements</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Thread reply</td><td class="px-3 py-2 font-mono text-blue-400">chat.postMessage + thread_ts</td><td class="px-3 py-2">Thread participants</td><td class="px-3 py-2">Follow-ups, approval prompts, question answers</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">DM</td><td class="px-3 py-2 font-mono text-blue-400">chat.postMessage + channel=user_id</td><td class="px-3 py-2">One user</td><td class="px-3 py-2">Personal check-in drafts, deadline reminders, escalations</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Ephemeral</td><td class="px-3 py-2 font-mono text-blue-400">chat.postEphemeral</td><td class="px-3 py-2">One user (disappears)</td><td class="px-3 py-2">Confirmation toasts, error feedback, slash command responses</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Scheduled</td><td class="px-3 py-2 font-mono text-blue-400">chat.scheduleMessage</td><td class="px-3 py-2">Scheduled delivery</td><td class="px-3 py-2">Morning check-in prompts, pre-meeting agendas, end-of-week reports</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Updated</td><td class="px-3 py-2 font-mono text-blue-400">chat.update</td><td class="px-3 py-2">In-place edit</td><td class="px-3 py-2">Update approval status after reaction, refresh dashboard cards</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Streamed (AI)</td><td class="px-3 py-2 font-mono text-blue-400">chat.startStream → appendStream → stopStream</td><td class="px-3 py-2">Real-time typing</td><td class="px-3 py-2">Long-form analysis, report generation with visible "thinking"</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card rounded-xl p-6 mb-4">
+          <h3 class="text-white font-semibold mb-4">Block Kit Components for Brev</h3>
+          <p class="text-xs text-slate-400 mb-4">Block Kit is the UI framework for Slack messages, modals, and Home tabs. These are the components Brev Operator uses to create rich, interactive portal experiences.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <h4 class="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-3">Layout Blocks</h4>
+              <div class="space-y-2 text-xs">
+                <div class="flex items-start gap-2"><span class="text-blue-400 font-mono w-20 flex-shrink-0">section</span><span class="text-slate-400">Text + optional accessory (button, image, select). <strong class="text-slate-300">Goal cards, KPI readouts, check-in summaries.</strong></span></div>
+                <div class="flex items-start gap-2"><span class="text-blue-400 font-mono w-20 flex-shrink-0">header</span><span class="text-slate-400">Large bold text. <strong class="text-slate-300">Report titles, section headers.</strong></span></div>
+                <div class="flex items-start gap-2"><span class="text-blue-400 font-mono w-20 flex-shrink-0">divider</span><span class="text-slate-400">Visual separator. <strong class="text-slate-300">Between goals in a report.</strong></span></div>
+                <div class="flex items-start gap-2"><span class="text-blue-400 font-mono w-20 flex-shrink-0">context</span><span class="text-slate-400">Small text + images. <strong class="text-slate-300">Timestamps, owner avatars, data sources.</strong></span></div>
+                <div class="flex items-start gap-2"><span class="text-blue-400 font-mono w-20 flex-shrink-0">actions</span><span class="text-slate-400">Group of interactive elements. <strong class="text-slate-300">Approve/reject buttons, status selectors.</strong></span></div>
+                <div class="flex items-start gap-2"><span class="text-blue-400 font-mono w-20 flex-shrink-0">input</span><span class="text-slate-400">Form field (modals only). <strong class="text-slate-300">Check-in text, KPI value, goal title.</strong></span></div>
+                <div class="flex items-start gap-2"><span class="text-blue-400 font-mono w-20 flex-shrink-0">rich_text</span><span class="text-slate-400">Rich formatted text. <strong class="text-slate-300">Formatted reports, meeting notes.</strong></span></div>
+              </div>
+            </div>
+            <div>
+              <h4 class="text-xs font-semibold text-green-400 uppercase tracking-wider mb-3">Interactive Elements</h4>
+              <div class="space-y-2 text-xs">
+                <div class="flex items-start gap-2"><span class="text-green-400 font-mono w-20 flex-shrink-0">button</span><span class="text-slate-400">Click action. Styles: primary (green), danger (red), default. <strong class="text-slate-300">Approve, reject, view in Brev, edit.</strong></span></div>
+                <div class="flex items-start gap-2"><span class="text-green-400 font-mono w-20 flex-shrink-0">select</span><span class="text-slate-400">Dropdown. Static, external, user, conversation, channel selects. <strong class="text-slate-300">Assign owner, pick team, set status.</strong></span></div>
+                <div class="flex items-start gap-2"><span class="text-green-400 font-mono w-20 flex-shrink-0">multi_select</span><span class="text-slate-400">Multi-pick dropdown. <strong class="text-slate-300">Tag goals, add collaborators.</strong></span></div>
+                <div class="flex items-start gap-2"><span class="text-green-400 font-mono w-20 flex-shrink-0">datepicker</span><span class="text-slate-400">Calendar date selection. <strong class="text-slate-300">Set deadlines, schedule follow-ups.</strong></span></div>
+                <div class="flex items-start gap-2"><span class="text-green-400 font-mono w-20 flex-shrink-0">overflow</span><span class="text-slate-400">⋯ menu. <strong class="text-slate-300">More actions: reassign, archive, mark complete.</strong></span></div>
+                <div class="flex items-start gap-2"><span class="text-green-400 font-mono w-20 flex-shrink-0">radio</span><span class="text-slate-400">Radio button group. <strong class="text-slate-300">Status selection (on track/behind/at risk).</strong></span></div>
+                <div class="flex items-start gap-2"><span class="text-green-400 font-mono w-20 flex-shrink-0">checkbox</span><span class="text-slate-400">Checkbox group. <strong class="text-slate-300">Select action items to mark complete.</strong></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Example: Check-in Draft Message -->
+        <div class="card rounded-xl p-6">
+          <h3 class="text-white font-semibold mb-4">Example: Operator Check-in Draft in Slack</h3>
+          <div class="arch-diagram rounded-lg p-4 text-xs">
+<pre class="text-slate-400"><span class="text-green-400">// Operator posts a check-in draft for approval</span>
+{
+  "channel": "<span class="text-blue-400">D_MIKE_DM_ID</span>",
+  "blocks": [
+    { "type": "header", "text": { "type": "plain_text", "text": "📊 Q2 Pipeline Check-in Draft" } },
+    { "type": "section", "fields": [
+      { "type": "mrkdwn", "text": "*Goal:* Increase Net New ARR by 50% to $30M" },
+      { "type": "mrkdwn", "text": "*Status:* <span class="text-emerald-400">On Track</span> → 85.4%" }
+    ]},
+    { "type": "section", "text": {
+      "type": "mrkdwn",
+      "text": "*Auto-generated update:*\nPipeline at $1.2M vs $1.5M target. Acme deal slipped from Q2 → Q3.\nWest Coast team pacing +18% MoM. Self-serve funnel referenced 6x this week."
+    }},
+    { "type": "context", "elements": [
+      { "type": "mrkdwn", "text": "📎 Sources: HubSpot pipeline data, Wed forecast call transcript" }
+    ]},
+    { "type": "actions", "elements": [
+      { "type": "button", "text": { "type": "plain_text", "text": "✅ Approve & Submit" },
+        "style": "primary", "action_id": "<span class="text-orange-400">approve_checkin</span>" },
+      { "type": "button", "text": { "type": "plain_text", "text": "✏️ Edit" },
+        "action_id": "<span class="text-orange-400">edit_checkin</span>" },
+      { "type": "button", "text": { "type": "plain_text", "text": "❌ Dismiss" },
+        "action_id": "<span class="text-orange-400">dismiss_checkin</span>" }
+    ]}
+  ]
+}</pre>
+          </div>
+          <p class="text-xs text-slate-500 mt-3">User clicks "Approve" → Operator submits the check-in to Brev via API → updates message to show ✅ status → moves to next check-in.</p>
+        </div>
+      </section>
+
+      <!-- App Home -->
+      <section id="app-home" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">App Home — Personal Brev Dashboard</h2>
+        <div class="card rounded-xl p-6 mb-4">
+          <p class="text-sm text-slate-400 mb-4">The App Home is a private, per-user space that lives under the Brev bot in the Slack sidebar. It has three tabs:</p>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-pink-400 mb-2">Home Tab ★</h4>
+              <p class="text-xs text-slate-400 mb-2">Fully customizable, persistent view. Up to 100 Block Kit blocks. Updated via <code class="text-blue-400">views.publish</code>.</p>
+              <p class="text-xs text-slate-500"><strong>Brev portal:</strong> Personal dashboard showing your goals, pending check-ins, action items, Operator activity log, and settings.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-blue-400 mb-2">Messages Tab</h4>
+              <p class="text-xs text-slate-400 mb-2">DM conversation between the user and the bot. Standard messaging features.</p>
+              <p class="text-xs text-slate-500"><strong>Brev portal:</strong> Chat with the Operator. Ask questions, give instructions, provide context for follow-ups.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-slate-400 mb-2">About Tab</h4>
+              <p class="text-xs text-slate-400 mb-2">Descriptive info about the app. Set during app configuration.</p>
+              <p class="text-xs text-slate-500"><strong>Brev portal:</strong> Help docs, configuration links, "Open in Brev" button.</p>
+            </div>
+          </div>
+
+          <h4 class="text-sm font-semibold text-white mb-3">Home Tab Layout for Brev Operator</h4>
+          <div class="bg-slate-800/30 rounded-lg p-4 space-y-3 text-xs">
+            <div class="border-b border-slate-700/50 pb-2">
+              <span class="text-pink-400 font-semibold">Section 1: Status Summary</span>
+              <p class="text-slate-500 mt-1">Your goals: 3 On Track, 1 Behind, 1 At Risk · 2 check-ins due · 4 pending action items</p>
+            </div>
+            <div class="border-b border-slate-700/50 pb-2">
+              <span class="text-pink-400 font-semibold">Section 2: Pending Actions</span>
+              <p class="text-slate-500 mt-1">Check-in drafts awaiting approval · Action items from meetings · Operator recommendations to review</p>
+            </div>
+            <div class="border-b border-slate-700/50 pb-2">
+              <span class="text-pink-400 font-semibold">Section 3: My Goals</span>
+              <p class="text-slate-500 mt-1">Goal cards with progress bars, status badges, owner, and quick-action buttons (Update, Check-in, View in Brev)</p>
+            </div>
+            <div class="border-b border-slate-700/50 pb-2">
+              <span class="text-pink-400 font-semibold">Section 4: Operator Activity</span>
+              <p class="text-slate-500 mt-1">Recent Operator actions: "Sent follow-up to @jake re: API migration" · "Drafted Q2 pipeline check-in" · "Escalated QA capacity to @sarah"</p>
+            </div>
+            <div>
+              <span class="text-pink-400 font-semibold">Section 5: Settings</span>
+              <p class="text-slate-500 mt-1">Button → opens modal: notification preferences, follow-up frequency, autonomy level, mute controls</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Modals -->
+      <section id="modals" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">Modals — Rich Forms & Multi-Step Wizards</h2>
+        <div class="card rounded-xl p-6">
+          <p class="text-sm text-slate-400 mb-4">Modals are pop-up windows that capture focus. They're the best surface for structured data input — creating goals, editing check-ins, configuring the Operator. Key features:</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-yellow-400 mb-2">Capabilities</h4>
+              <ul class="space-y-1 text-xs text-slate-400">
+                <li>• Up to 3 views in a view stack (multi-step wizards)</li>
+                <li>• Input blocks: text, selects, date pickers, checkboxes, radio buttons</li>
+                <li>• Can push, update, or clear views dynamically</li>
+                <li>• Submit + cancel buttons with custom labels</li>
+                <li>• App can validate and return errors inline</li>
+              </ul>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-yellow-400 mb-2">Brev Use Cases</h4>
+              <ul class="space-y-1 text-xs text-slate-400">
+                <li>• <strong class="text-slate-300">Create Goal:</strong> Title → Owner → Key Results → Parent Goal (3-step wizard)</li>
+                <li>• <strong class="text-slate-300">Edit Check-in:</strong> Pre-filled draft, edit text, change status, submit</li>
+                <li>• <strong class="text-slate-300">Approve with Notes:</strong> View action details, add notes, approve/reject</li>
+                <li>• <strong class="text-slate-300">Operator Settings:</strong> Notification prefs, follow-up frequency, DM vs. channel</li>
+                <li>• <strong class="text-slate-300">Reassign Goal:</strong> Pick new owner from user select, add reason</li>
+              </ul>
+            </div>
+          </div>
+          <p class="text-xs text-slate-500"><strong class="text-slate-300">Constraint:</strong> Modals require a <code class="text-pink-400">trigger_id</code> — they can only be opened in response to a user action (button click, slash command, shortcut). The Operator cannot proactively open a modal. This is by design — modals are always user-initiated.</p>
+        </div>
+      </section>
+
+      <!-- AI Features -->
+      <section id="ai-features" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">Slack AI Features — Split View & Agent Experience</h2>
+        <div class="card rounded-xl p-6 mb-4">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="tag tag-new">Requires Paid Slack Plan</span>
+          </div>
+          <p class="text-sm text-slate-400 mb-4">Slack's Agents & AI Apps framework gives Brev Operator a native AI experience: side-by-side chat, suggested prompts, loading states, text streaming, and thinking-step visualization.</p>
+
+          <div class="space-y-4">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-cyan-400 mb-2">Split View (Side-by-Side Pane)</h4>
+              <p class="text-xs text-slate-400 mb-2">The Operator lives in the Slack top bar. Clicking it opens a side pane — user can chat with the Operator while viewing channels/threads on the other side. Conversations are auto-threaded.</p>
+              <p class="text-xs text-slate-500"><strong>Brev portal:</strong> "What's at risk this week?" → Operator streams a real-time analysis with Block Kit formatting. User never leaves their channel view.</p>
+            </div>
+
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-cyan-400 mb-2">Suggested Prompts</h4>
+              <p class="text-xs text-slate-400 mb-2">Present clickable prompt suggestions when a user opens a new conversation with the Operator. Contextual and personalized.</p>
+              <div class="arch-diagram rounded-lg p-3 text-xs mt-2">
+<pre class="text-slate-400">"prompts": [
+  { "title": "📊 Weekly Report", "message": "Generate this week's exec summary" },
+  { "title": "🎯 My Goals", "message": "Show all my goals and their status" },
+  { "title": "⚠️ What's at Risk?", "message": "What goals are at risk right now?" },
+  { "title": "✅ Pending Check-ins", "message": "What check-ins do I need to review?" }
+]</pre>
+              </div>
+            </div>
+
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-cyan-400 mb-2">Text Streaming</h4>
+              <p class="text-xs text-slate-400 mb-2">Stream long-form responses token-by-token using <code class="text-blue-400">chat.startStream</code> → <code class="text-blue-400">chat.appendStream</code> → <code class="text-blue-400">chat.stopStream</code>. Block Kit blocks can be added in <code>stopStream</code> for structured formatting after streaming completes.</p>
+              <p class="text-xs text-slate-500"><strong>Brev portal:</strong> Long analysis requests get streamed output so users see progress immediately. Final message includes formatted Block Kit cards.</p>
+            </div>
+
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-cyan-400 mb-2">Agent Thinking Steps</h4>
+              <p class="text-xs text-slate-400 mb-2">Display the Operator's reasoning process using <code class="text-blue-400">task_card</code> blocks and <code class="text-blue-400">plan</code> blocks. Two display modes:</p>
+              <div class="grid grid-cols-2 gap-3 mt-2">
+                <div class="bg-slate-900/50 rounded p-2 text-xs">
+                  <span class="text-slate-300 font-semibold">Timeline mode:</span>
+                  <p class="text-slate-500">Tasks appear as individual cards in sequence. Good for step-by-step operations.</p>
+                </div>
+                <div class="bg-slate-900/50 rounded p-2 text-xs">
+                  <span class="text-slate-300 font-semibold">Plan mode:</span>
+                  <p class="text-slate-500">Tasks grouped in a comprehensive plan view. Good for multi-step analysis.</p>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500 mt-2"><strong>Brev portal:</strong> "Reading your 5 goals... Checking HubSpot pipeline... Analyzing meeting transcripts... Drafting risk assessment..." — visible thinking builds trust.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Events -->
+      <section id="events" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">Events API & Real-Time Listening</h2>
+        <div class="card rounded-xl p-6">
+          <p class="text-sm text-slate-400 mb-4">The Events API pushes events to Brev Operator whenever specific things happen in Slack. Two delivery options: HTTP endpoints or Socket Mode (WebSocket).</p>
+
+          <h4 class="text-sm font-semibold text-white mb-3">Events Brev Operator Needs</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left text-slate-400">
+                  <th class="px-3 py-2">Event</th>
+                  <th class="px-3 py-2">Trigger</th>
+                  <th class="px-3 py-2">Brev Use</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-3 py-2 font-mono text-pink-400">app_mention</td><td class="px-3 py-2">Someone @mentions @brev</td><td class="px-3 py-2">Primary interaction entry point — parse intent, route to action</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-pink-400">message.im</td><td class="px-3 py-2">DM to the bot</td><td class="px-3 py-2">Private conversations — personal check-ins, questions, configuration</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-pink-400">message.channels</td><td class="px-3 py-2">Message in a channel the bot is in</td><td class="px-3 py-2">Context listening — detect action items, commitments, decisions (opt-in per channel)</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-pink-400">reaction_added</td><td class="px-3 py-2">User adds a reaction to a message</td><td class="px-3 py-2">✅ reaction on Operator draft → approve and execute. 👀 → acknowledge. ❌ → dismiss.</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-pink-400">app_home_opened</td><td class="px-3 py-2">User opens the Brev App Home</td><td class="px-3 py-2">Refresh dashboard with latest data — goals, pending items, activity log</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-pink-400">member_joined_channel</td><td class="px-3 py-2">Bot added to a channel</td><td class="px-3 py-2">Introduce Brev Operator, offer to connect channel to a team/goal</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-pink-400">assistant_thread_started</td><td class="px-3 py-2">User opens the AI split pane</td><td class="px-3 py-2">Set suggested prompts, initialize context for conversational queries</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-pink-400">assistant_thread_context_changed</td><td class="px-3 py-2">User switches context in the split pane</td><td class="px-3 py-2">Update Operator context to reflect current channel/thread being viewed</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-4 pt-4 border-t border-slate-700/50">
+            <h4 class="text-sm font-semibold text-white mb-2">Socket Mode vs. HTTP</h4>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="bg-slate-800/30 rounded-lg p-3 text-xs">
+                <span class="text-green-400 font-semibold">Socket Mode (WebSocket)</span>
+                <p class="text-slate-500 mt-1">No public URL needed. Real-time. Good for development and single-instance deployments. Not ideal for horizontal scaling.</p>
+              </div>
+              <div class="bg-slate-800/30 rounded-lg p-3 text-xs">
+                <span class="text-blue-400 font-semibold">HTTP Request URLs ★</span>
+                <p class="text-slate-500 mt-1">Production-grade. Scalable behind load balancers. Standard webhook pattern. <strong class="text-slate-300">Recommended for Brev's multi-tenant architecture.</strong></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Slash Commands -->
+      <section id="slash" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">Slash Commands — Quick Actions</h2>
+        <div class="card rounded-xl p-6">
+          <p class="text-sm text-slate-400 mb-4">Slash commands give users instant access to Brev operations from the message composer in any channel or DM.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left text-slate-400">
+                  <th class="px-3 py-2">Command</th>
+                  <th class="px-3 py-2">Response Type</th>
+                  <th class="px-3 py-2">Action</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-3 py-2 font-mono text-blue-400">/brev goals</td><td class="px-3 py-2">Ephemeral message</td><td class="px-3 py-2">Show all your goals with status, progress, and quick actions</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-blue-400">/brev checkin</td><td class="px-3 py-2">Modal</td><td class="px-3 py-2">Open check-in form pre-filled with Operator's draft</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-blue-400">/brev risk</td><td class="px-3 py-2">Ephemeral message</td><td class="px-3 py-2">Show all at-risk and behind goals across the org</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-blue-400">/brev report</td><td class="px-3 py-2">Channel message</td><td class="px-3 py-2">Generate and post a team/company report to the current channel</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-blue-400">/brev assign @user "goal"</td><td class="px-3 py-2">Ephemeral + DM</td><td class="px-3 py-2">Assign/reassign a goal owner, notify them via DM</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-blue-400">/brev create</td><td class="px-3 py-2">Modal (wizard)</td><td class="px-3 py-2">Multi-step goal creation wizard: title → type → owner → key results → parent</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-blue-400">/brev settings</td><td class="px-3 py-2">Modal</td><td class="px-3 py-2">Personal Operator settings: notification prefs, frequency, mute</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-blue-400">/brev help</td><td class="px-3 py-2">Ephemeral message</td><td class="px-3 py-2">List all commands and capabilities</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scopes -->
+      <section id="scopes" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">Required Scopes & Permissions</h2>
+        <div class="card rounded-xl p-6">
+          <p class="text-sm text-slate-400 mb-4">The Brev Slack app needs these OAuth bot token scopes. Each scope is requested during workspace installation.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left text-slate-400">
+                  <th class="px-3 py-2">Scope</th>
+                  <th class="px-3 py-2">Purpose</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-3 py-2 font-mono text-green-400">chat:write</td><td class="px-3 py-2">Send messages to channels and DMs</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">chat:write.customize</td><td class="px-3 py-2">Customize bot display name/icon per message (optional — for sub-agent personas)</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">channels:read</td><td class="px-3 py-2">List public channels, get channel info</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">channels:history</td><td class="px-3 py-2">Read message history in public channels the bot is in</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">groups:read</td><td class="px-3 py-2">List private channels the bot is invited to</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">groups:history</td><td class="px-3 py-2">Read history in private channels the bot is in</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">im:read</td><td class="px-3 py-2">View DM channel info</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">im:history</td><td class="px-3 py-2">Read DM message history</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">im:write</td><td class="px-3 py-2">Open and send DMs</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">users:read</td><td class="px-3 py-2">Look up user profiles — map Slack IDs to Brev users</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">users:read.email</td><td class="px-3 py-2">Get user emails — needed for Brev user mapping</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">reactions:read</td><td class="px-3 py-2">Read reactions on messages — detect ✅ approvals</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">reactions:write</td><td class="px-3 py-2">Add reactions — confirm receipt, acknowledge actions</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">files:write</td><td class="px-3 py-2">Upload files — reports, exports, artifacts</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">commands</td><td class="px-3 py-2">Register slash commands (/brev)</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-green-400">assistant:write</td><td class="px-3 py-2">AI features — split view, suggested prompts, loading states</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Brev Portal Map -->
+      <section id="portal-map" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">Complete Brev Portal Map</h2>
+        <p class="text-sm text-slate-400 mb-4">Every Brev operation mapped to the optimal Slack surface, interaction pattern, and API method.</p>
+        <div class="card rounded-xl p-6">
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left text-slate-400">
+                  <th class="px-3 py-2">Brev Operation</th>
+                  <th class="px-3 py-2">Slack Surface</th>
+                  <th class="px-3 py-2">Trigger</th>
+                  <th class="px-3 py-2">Interaction Flow</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr class="border-t border-slate-700/30"><td colspan="4" class="px-3 py-2 text-orange-400 font-semibold bg-orange-500/5">Goals</td></tr>
+                <tr><td class="px-3 py-2 text-white">View my goals</td><td class="px-3 py-2">Home Tab / Ephemeral</td><td class="px-3 py-2"><code>/brev goals</code> or open App Home</td><td class="px-3 py-2">Block Kit goal cards with progress bars + action buttons</td></tr>
+                <tr><td class="px-3 py-2 text-white">Create goal</td><td class="px-3 py-2">Modal (3-step)</td><td class="px-3 py-2"><code>/brev create</code> or @mention or Home button</td><td class="px-3 py-2">Wizard: title → owner/team → key results → submit → confirm message</td></tr>
+                <tr><td class="px-3 py-2 text-white">Update goal status</td><td class="px-3 py-2">Message + Button → Modal</td><td class="px-3 py-2">Operator prompt or @mention</td><td class="px-3 py-2">Click "Update" → modal with status select + notes → submit</td></tr>
+                <tr><td class="px-3 py-2 text-white">Reassign goal</td><td class="px-3 py-2">Modal</td><td class="px-3 py-2">@mention or overflow menu</td><td class="px-3 py-2">User select → reason text → submit → new owner notified via DM</td></tr>
+
+                <tr class="border-t border-slate-700/30"><td colspan="4" class="px-3 py-2 text-orange-400 font-semibold bg-orange-500/5">Check-ins</td></tr>
+                <tr><td class="px-3 py-2 text-white">Draft check-in</td><td class="px-3 py-2">DM message</td><td class="px-3 py-2">Proactive (Operator cron)</td><td class="px-3 py-2">Pre-filled draft with approve/edit/dismiss buttons</td></tr>
+                <tr><td class="px-3 py-2 text-white">Submit check-in</td><td class="px-3 py-2">Button action</td><td class="px-3 py-2">✅ button or ✅ reaction</td><td class="px-3 py-2">Operator submits to Brev API → updates message → confirms</td></tr>
+                <tr><td class="px-3 py-2 text-white">Edit check-in</td><td class="px-3 py-2">Modal</td><td class="px-3 py-2">✏️ button on draft</td><td class="px-3 py-2">Editable form pre-filled with draft → submit → done</td></tr>
+
+                <tr class="border-t border-slate-700/30"><td colspan="4" class="px-3 py-2 text-orange-400 font-semibold bg-orange-500/5">Reports & Analysis</td></tr>
+                <tr><td class="px-3 py-2 text-white">Weekly digest</td><td class="px-3 py-2">Channel message</td><td class="px-3 py-2">Scheduled (cron)</td><td class="px-3 py-2">Rich Block Kit report → posted to #leadership or configured channel</td></tr>
+                <tr><td class="px-3 py-2 text-white">Risk analysis</td><td class="px-3 py-2">Split view / Ephemeral</td><td class="px-3 py-2"><code>/brev risk</code> or AI pane query</td><td class="px-3 py-2">Streamed analysis with thinking steps → Block Kit summary</td></tr>
+                <tr><td class="px-3 py-2 text-white">Custom query</td><td class="px-3 py-2">Split view</td><td class="px-3 py-2">Natural language in AI pane</td><td class="px-3 py-2">Parse intent → query Brev APIs → stream formatted response</td></tr>
+
+                <tr class="border-t border-slate-700/30"><td colspan="4" class="px-3 py-2 text-orange-400 font-semibold bg-orange-500/5">Follow-ups & Orchestration</td></tr>
+                <tr><td class="px-3 py-2 text-white">Follow-up on commitment</td><td class="px-3 py-2">Thread reply / DM</td><td class="px-3 py-2">Proactive (Operator cron)</td><td class="px-3 py-2">Contextual message referencing meeting transcript → status buttons</td></tr>
+                <tr><td class="px-3 py-2 text-white">Escalate blocker</td><td class="px-3 py-2">DM to decision-maker</td><td class="px-3 py-2">Proactive (Operator detects)</td><td class="px-3 py-2">Context + options with action buttons → decision-maker picks option</td></tr>
+                <tr><td class="px-3 py-2 text-white">Meeting agenda</td><td class="px-3 py-2">Thread / Canvas</td><td class="px-3 py-2">Scheduled (1h before)</td><td class="px-3 py-2">Formatted agenda with metrics, open items, suggested topics</td></tr>
+
+                <tr class="border-t border-slate-700/30"><td colspan="4" class="px-3 py-2 text-orange-400 font-semibold bg-orange-500/5">Settings & Meta</td></tr>
+                <tr><td class="px-3 py-2 text-white">Operator settings</td><td class="px-3 py-2">Modal</td><td class="px-3 py-2"><code>/brev settings</code> or Home button</td><td class="px-3 py-2">Notification prefs, follow-up frequency, mute, autonomy level</td></tr>
+                <tr><td class="px-3 py-2 text-white">Activity log</td><td class="px-3 py-2">Home Tab</td><td class="px-3 py-2">Open App Home</td><td class="px-3 py-2">Timeline of Operator actions with context and outcomes</td></tr>
+                <tr><td class="px-3 py-2 text-white">Open in Brev</td><td class="px-3 py-2">Link button</td><td class="px-3 py-2">Any message/card</td><td class="px-3 py-2">Deep link to relevant Brev web app page with context</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Rate Limits -->
+      <section id="rate-limits" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">Rate Limits & Constraints</h2>
+        <div class="card rounded-xl p-6">
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left text-slate-400">
+                  <th class="px-3 py-2">Method</th>
+                  <th class="px-3 py-2">Tier</th>
+                  <th class="px-3 py-2">Rate</th>
+                  <th class="px-3 py-2">Impact on Brev</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-3 py-2 font-mono text-blue-400">chat.postMessage</td><td class="px-3 py-2">Special</td><td class="px-3 py-2">1 msg/sec/channel, 1 msg/sec/user for DMs</td><td class="px-3 py-2">Queue outbound messages. Batch digests. Don't spam channels.</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-blue-400">chat.update</td><td class="px-3 py-2">Tier 3</td><td class="px-3 py-2">~50/min</td><td class="px-3 py-2">Fine for updating approval statuses. Don't poll-update.</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-blue-400">views.open</td><td class="px-3 py-2">Tier 4</td><td class="px-3 py-2">~100/min</td><td class="px-3 py-2">No concern — user-triggered.</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-blue-400">views.publish</td><td class="px-3 py-2">Tier 4</td><td class="px-3 py-2">~100/min</td><td class="px-3 py-2">Home tab updates. Batch per-user refreshes.</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-blue-400">conversations.history</td><td class="px-3 py-2">Tier 3</td><td class="px-3 py-2">~50/min</td><td class="px-3 py-2">Cache channel history. Don't re-read every cycle.</td></tr>
+                <tr><td class="px-3 py-2 font-mono text-blue-400">users.info</td><td class="px-3 py-2">Tier 4</td><td class="px-3 py-2">~100/min</td><td class="px-3 py-2">Cache user profiles at install. Refresh periodically.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-4 pt-4 border-t border-slate-700/50">
+            <h4 class="text-sm font-semibold text-white mb-2">Multi-Tenant Considerations</h4>
+            <p class="text-xs text-slate-400">Rate limits are per-app-per-workspace. Each Brev customer workspace has its own rate limit budget. For a 100-person org, 1 msg/sec is 3,600 msgs/hour — more than enough. The constraint isn't rate limits; it's user tolerance for message volume.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Implementation Recommendation -->
+      <section id="implementation" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">Implementation Recommendation</h2>
+        <div class="card rounded-xl p-6 glow border-purple-500/20">
+          <h3 class="text-white font-semibold mb-4">Slack SDK: Bolt for JavaScript</h3>
+          <p class="text-sm text-slate-400 mb-4">Use <a href="https://slack.dev/bolt-js" class="text-blue-400 hover:text-blue-300">Bolt for JS</a> — Slack's official framework. Handles OAuth, event subscriptions, interactivity, Socket Mode, and all the plumbing. Matches Brev's existing TypeScript stack.</p>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-green-400 mb-2">Phase 1: Core Portal</h4>
+              <ul class="text-xs text-slate-400 space-y-1">
+                <li>• Bolt for JS setup with HTTP event delivery</li>
+                <li>• OAuth install flow (multi-tenant)</li>
+                <li>• @mention handling → intent detection → CRUD routing</li>
+                <li>• Block Kit message templates for goals, check-ins, reports</li>
+                <li>• Home Tab with personal dashboard</li>
+                <li>• 3 slash commands: <code>/brev goals</code>, <code>/brev checkin</code>, <code>/brev help</code></li>
+              </ul>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-blue-400 mb-2">Phase 2: Rich Interactions</h4>
+              <ul class="text-xs text-slate-400 space-y-1">
+                <li>• Modal forms for goal creation, check-in editing</li>
+                <li>• Reaction-based approvals (✅ / ❌)</li>
+                <li>• AI split view with suggested prompts</li>
+                <li>• Text streaming for analysis responses</li>
+                <li>• Full slash command suite</li>
+                <li>• Canvas integration for long-form reports</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.nav-link');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          navLinks.forEach(link => link.classList.remove('active'));
+          const active = document.querySelector(`.nav-link[href="#${entry.target.id}"]`);
+          if (active) active.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -80% 0px' });
+    sections.forEach(section => observer.observe(section));
+  </script>
+</body>
+</html>
