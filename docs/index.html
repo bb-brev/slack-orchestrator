@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Slack-First Agent Orchestrator — Planning Document</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwindcss.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              850: '#172033',
+              950: '#0a0f1a',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body { background: #0a0f1a; }
+    .gradient-text {
+      background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .card {
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(100, 116, 139, 0.2);
+      backdrop-filter: blur(12px);
+    }
+    .card:hover {
+      border-color: rgba(99, 102, 241, 0.4);
+    }
+    .glow { box-shadow: 0 0 60px rgba(99, 102, 241, 0.08); }
+    .nav-link.active { color: #818cf8; border-left-color: #6366f1; }
+    .phase-line { position: relative; }
+    .phase-line::before {
+      content: '';
+      position: absolute;
+      left: 15px;
+      top: 40px;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, #6366f1, transparent);
+    }
+    .decision-badge {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(167, 139, 250, 0.2));
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+    .risk-critical { border-left: 3px solid #ef4444; }
+    .risk-high { border-left: 3px solid #f97316; }
+    .risk-medium { border-left: 3px solid #eab308; }
+    .risk-low { border-left: 3px solid #22c55e; }
+    .toc-indicator {
+      position: fixed;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 50;
+    }
+    @media (max-width: 1024px) {
+      .sidebar { display: none; }
+    }
+    .prose-section h3 { scroll-margin-top: 100px; }
+    table { border-collapse: separate; border-spacing: 0; }
+    th { background: rgba(30, 41, 59, 0.8); }
+    td, th { border-bottom: 1px solid rgba(100, 116, 139, 0.15); }
+    .arch-diagram {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(100, 116, 139, 0.2);
+      font-family: 'JetBrains Mono', monospace;
+      overflow-x: auto;
+    }
+    details summary { cursor: pointer; }
+    details summary::-webkit-details-marker { display: none; }
+    details[open] summary .chevron { transform: rotate(90deg); }
+    .tag {
+      font-size: 0.65rem;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .tag-recommended { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .tag-alternative { background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
+    .tag-rejected { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+  </style>
+</head>
+<body class="text-slate-300 font-sans antialiased">
+
+  <!-- Header -->
+  <header class="fixed top-0 w-full z-50 border-b border-slate-800/50 bg-[#0a0f1a]/80 backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+        </div>
+        <span class="font-bold text-white text-lg">Orchestrator</span>
+        <span class="tag tag-alternative ml-2">RFC Draft</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-slate-500">
+        <span>2026-03-18</span>
+        <span>·</span>
+        <span>Kit + Benn</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex">
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar fixed left-0 top-16 bottom-0 w-56 border-r border-slate-800/50 bg-[#0a0f1a]/60 backdrop-blur-xl overflow-y-auto py-6 px-4 z-40">
+      <div class="space-y-1 text-sm">
+        <a href="#vision" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-indigo-500/50 transition-all">Vision</a>
+        <a href="#references" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-indigo-500/50 transition-all">References</a>
+        <a href="#architecture" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-indigo-500/50 transition-all">Architecture</a>
+        <a href="#decisions" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-indigo-500/50 transition-all">Decisions</a>
+        <a href="#integrations" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-indigo-500/50 transition-all">Integrations</a>
+        <a href="#implementation" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-indigo-500/50 transition-all">Implementation</a>
+        <a href="#risks" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-indigo-500/50 transition-all">Risks</a>
+        <a href="#naming" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-indigo-500/50 transition-all">Naming</a>
+        <a href="#open-questions" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-indigo-500/50 transition-all">Open Questions</a>
+        <a href="#metrics" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-indigo-500/50 transition-all">Metrics</a>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="ml-0 lg:ml-56 flex-1 max-w-4xl mx-auto px-6 pt-28 pb-20">
+
+      <!-- Hero -->
+      <section class="mb-16">
+        <h1 class="text-4xl md:text-5xl font-extrabold text-white leading-tight mb-4">
+          Slack-First<br><span class="gradient-text">Agent Orchestrator</span>
+        </h1>
+        <p class="text-lg text-slate-400 max-w-2xl mb-8">
+          An autonomous orchestration layer that discovers work, spawns agents, and surfaces decisions — all through Slack.
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <span class="px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-sm border border-indigo-500/20">OpenClaw Runtime</span>
+          <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-sm border border-emerald-500/20">Slack Native</span>
+          <span class="px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-sm border border-amber-500/20">Self-Hosted</span>
+          <span class="px-3 py-1 rounded-full bg-purple-500/10 text-purple-400 text-sm border border-purple-500/20">Open Source</span>
+        </div>
+      </section>
+
+      <!-- Vision -->
+      <section id="vision" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-mono">01</span>
+          Vision
+        </h2>
+        <div class="card rounded-xl p-6 glow">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-4">
+              <div class="flex items-start gap-3">
+                <div class="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                </div>
+                <div>
+                  <h4 class="text-white font-semibold text-sm">Discovers its own work</h4>
+                  <p class="text-slate-400 text-sm">Watches Slack, integrations, and the web for actionable tasks</p>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <div class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </div>
+                <div>
+                  <h4 class="text-white font-semibold text-sm">Spawns specialized agents</h4>
+                  <p class="text-slate-400 text-sm">Coders, researchers, writers — each isolated with the right tools</p>
+                </div>
+              </div>
+            </div>
+            <div class="space-y-4">
+              <div class="flex items-start gap-3">
+                <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <div>
+                  <h4 class="text-white font-semibold text-sm">Surfaces questions</h4>
+                  <p class="text-slate-400 text-sm">When agents get stuck, routes blockers to the right humans in Slack</p>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <div class="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                </div>
+                <div>
+                  <h4 class="text-white font-semibold text-sm">Proactively productive</h4>
+                  <p class="text-slate-400 text-sm">Finds useful work without being asked — not just reactive</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-6 pt-6 border-t border-slate-700/50">
+            <p class="text-sm text-slate-500 italic">Think Viktor's UX (one @mention, real deliverables) but open-source, self-hosted, and built on the OpenClaw runtime.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- References -->
+      <section id="references" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-mono">02</span>
+          Reference Analysis
+        </h2>
+
+        <!-- Viktor -->
+        <div class="card rounded-xl p-6 mb-4">
+          <div class="flex items-center gap-3 mb-4">
+            <h3 class="text-lg font-semibold text-white">Viktor</h3>
+            <a href="https://getviktor.com" class="text-xs text-indigo-400 hover:text-indigo-300">getviktor.com ↗</a>
+          </div>
+          <p class="text-sm text-slate-400 mb-4">Commercial Slack/Teams AI coworker with 3,000+ integrations. @mention → end-to-end execution — PDFs, spreadsheets, deployed web apps, CRM updates.</p>
+
+          <details class="mb-3">
+            <summary class="flex items-center gap-2 text-sm font-medium text-emerald-400 hover:text-emerald-300">
+              <span class="chevron transition-transform text-xs">▶</span> What to steal
+            </summary>
+            <ul class="mt-3 space-y-2 text-sm text-slate-400 pl-6">
+              <li><strong class="text-slate-300">@mention as primary UI.</strong> No dashboards, no portals. Slack is the UI.</li>
+              <li><strong class="text-slate-300">Real deliverables.</strong> Artifacts, not paragraphs. Files, deploys, emails.</li>
+              <li><strong class="text-slate-300">Deep memory.</strong> Conversations compound — learns preferences, context, past decisions.</li>
+              <li><strong class="text-slate-300">Recurring task ownership.</strong> Proposes automations and schedules recurring work.</li>
+              <li><strong class="text-slate-300">Proactive work discovery.</strong> "It figures out what needs automating."</li>
+            </ul>
+          </details>
+
+          <details>
+            <summary class="flex items-center gap-2 text-sm font-medium text-red-400 hover:text-red-300">
+              <span class="chevron transition-transform text-xs">▶</span> What's missing
+            </summary>
+            <ul class="mt-3 space-y-2 text-sm text-slate-400 pl-6">
+              <li>No visibility into agent reasoning or intermediate steps</li>
+              <li>No ability to steer mid-task — fire-and-forget</li>
+              <li>No open architecture — can't add your own tools or models</li>
+              <li>No self-hosted option — SOC2 ≠ data sovereignty</li>
+            </ul>
+          </details>
+        </div>
+
+        <!-- OpenClaw -->
+        <div class="card rounded-xl p-6">
+          <div class="flex items-center gap-3 mb-4">
+            <h3 class="text-lg font-semibold text-white">OpenClaw</h3>
+            <a href="https://github.com/openclaw/openclaw" class="text-xs text-indigo-400 hover:text-indigo-300">GitHub ↗</a>
+          </div>
+          <p class="text-sm text-slate-400 mb-4">Self-hosted AI gateway. Single Node.js process, 20+ channels, built-in cron, sub-agent spawning, skills, sandboxing.</p>
+
+          <details class="mb-3">
+            <summary class="flex items-center gap-2 text-sm font-medium text-emerald-400 hover:text-emerald-300">
+              <span class="chevron transition-transform text-xs">▶</span> Primitives we build on
+            </summary>
+            <div class="mt-3 overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-slate-400">
+                    <th class="px-3 py-2 rounded-tl-lg">Primitive</th>
+                    <th class="px-3 py-2 rounded-tr-lg">What it gives us</th>
+                  </tr>
+                </thead>
+                <tbody class="text-slate-400">
+                  <tr><td class="px-3 py-2 font-mono text-xs text-indigo-400">Gateway + Slack</td><td class="px-3 py-2">Native Bolt integration, mention gating, thread binding</td></tr>
+                  <tr><td class="px-3 py-2 font-mono text-xs text-indigo-400">sessions_spawn</td><td class="px-3 py-2">Isolated agent sessions with task prompts, announced results</td></tr>
+                  <tr><td class="px-3 py-2 font-mono text-xs text-indigo-400">Cron scheduler</td><td class="px-3 py-2">Persistent jobs, one-shot or recurring, isolated execution</td></tr>
+                  <tr><td class="px-3 py-2 font-mono text-xs text-indigo-400">Skills system</td><td class="px-3 py-2">AgentSkills folders — each teaches the agent a tool</td></tr>
+                  <tr><td class="px-3 py-2 font-mono text-xs text-indigo-400">Tool policies</td><td class="px-3 py-2">Filter which tools each agent/subagent can use</td></tr>
+                  <tr><td class="px-3 py-2 font-mono text-xs text-indigo-400">Memory + search</td><td class="px-3 py-2">MEMORY.md + semantic search across memory files</td></tr>
+                  <tr><td class="px-3 py-2 font-mono text-xs text-indigo-400">Exec + browser</td><td class="px-3 py-2">Shell execution, Chromium automation, web fetching</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </details>
+
+          <details>
+            <summary class="flex items-center gap-2 text-sm font-medium text-amber-400 hover:text-amber-300">
+              <span class="chevron transition-transform text-xs">▶</span> Gaps to fill
+            </summary>
+            <ul class="mt-3 space-y-2 text-sm text-slate-400 pl-6">
+              <li>No built-in task queue / work discovery engine</li>
+              <li>No structured task state (just session transcripts)</li>
+              <li>No integration framework beyond skills (no OAuth marketplace)</li>
+              <li>No approval workflow for agent-proposed actions</li>
+              <li>Memory is file-based, not queryable structured storage</li>
+            </ul>
+          </details>
+        </div>
+      </section>
+
+      <!-- Architecture -->
+      <section id="architecture" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-mono">03</span>
+          Architecture
+        </h2>
+
+        <!-- Diagram -->
+        <div class="arch-diagram rounded-xl p-6 mb-6 text-xs leading-relaxed">
+<pre class="text-indigo-300">
+┌─────────────────────────────────────────────────────┐
+│                      <span class="text-emerald-400">SLACK</span>                          │
+│    Channels · Threads · DMs · Reactions · Files     │
+└────────────────┬─────────────────────┬──────────────┘
+                 │ <span class="text-slate-500">inbound</span>             │ <span class="text-slate-500">outbound</span>
+                 ▼                     │
+┌─────────────────────────────────────────────────────┐
+│               <span class="text-amber-400">ORCHESTRATOR AGENT</span>                    │
+│    <span class="text-slate-500">(OpenClaw main agent + orchestrator skill)</span>        │
+│                                                     │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐│
+│  │ <span class="text-purple-400">Work</span>         │ │ <span class="text-blue-400">Task</span>         │ │ <span class="text-rose-400">Question</span>    ││
+│  │ <span class="text-purple-400">Discovery</span>    │ │ <span class="text-blue-400">Dispatcher</span>   │ │ <span class="text-rose-400">Router</span>      ││
+│  └──────┬───────┘ └──────┬───────┘ └──────┬───────┘│
+└─────────┼────────────────┼────────────────┼────────┘
+          │                │                │
+          ▼                ▼                ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ <span class="text-purple-400">Context</span>      │  │ <span class="text-blue-400">Sub-agents</span>   │  │ <span class="text-rose-400">Slack</span>        │
+│ <span class="text-purple-400">Sources</span>      │  │ <span class="text-blue-400">(spawned)</span>    │  │ <span class="text-rose-400">Threads</span>      │
+│              │  │              │  │ <span class="text-slate-500">(questions)</span>  │
+│ • Slack hist │  │ • Coder      │  └──────────────┘
+│ • Linear     │  │ • Researcher │
+│ • GitHub     │  │ • Writer     │
+│ • Calendar   │  │ • Ops        │
+│ • Web        │  │ • Custom     │
+└──────────────┘  └──────┬───────┘
+                         │
+                         ▼
+                  ┌──────────────┐
+                  │ <span class="text-amber-400">Task Store</span>   │
+                  │ <span class="text-slate-500">(SQLite)</span>     │
+                  └──────────────┘
+</pre>
+        </div>
+
+        <!-- Core Components -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="card rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-3 h-3 rounded-full bg-purple-500"></div>
+              <h4 class="font-semibold text-white text-sm">Work Discovery Engine</h4>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">Cron-driven scanner (every 15–30 min). Reads Slack channels, Linear issues, GitHub PRs, calendar, web for actionable work.</p>
+            <p class="text-xs text-slate-500"><strong>Output:</strong> Candidate tasks ranked by priority × urgency × confidence. High-confidence → auto-dispatch. Low-confidence → human approval.</p>
+          </div>
+
+          <div class="card rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-3 h-3 rounded-full bg-blue-500"></div>
+              <h4 class="font-semibold text-white text-sm">Task Dispatcher</h4>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">Selects agent type (coder, researcher, writer, ops), builds task prompt with context, calls <code class="text-indigo-400">sessions_spawn</code>.</p>
+            <p class="text-xs text-slate-500"><strong>Tracks:</strong> Task state in SQLite. Sets up delivery channel (thread reply, DM, or channel post).</p>
+          </div>
+
+          <div class="card rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-3 h-3 rounded-full bg-rose-500"></div>
+              <h4 class="font-semibold text-white text-sm">Question Router</h4>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">When a sub-agent hits a blocker, surfaces the question in the right Slack thread. Pipes human answers back via <code class="text-indigo-400">sessions_send</code>.</p>
+            <p class="text-xs text-slate-500"><strong>Escalation:</strong> DM if no thread response within configurable timeout.</p>
+          </div>
+
+          <div class="card rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-3 h-3 rounded-full bg-amber-500"></div>
+              <h4 class="font-semibold text-white text-sm">Task Store</h4>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">SQLite-backed structured persistence. Queryable, relational, zero-ops. Not transcripts.</p>
+            <div class="arch-diagram rounded-lg p-3 text-xs mt-2">
+              <pre class="text-slate-400"><span class="text-indigo-400">Task</span> { id, source, title, status,
+  priority, agentType, sessionKey,
+  assignedTo, blockedOn, artifacts[],
+  createdAt, updatedAt, completedAt }</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Decisions -->
+      <section id="decisions" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-mono">04</span>
+          Architectural Decisions
+        </h2>
+
+        <div class="space-y-4">
+          <!-- Decision 1 -->
+          <details class="card rounded-xl overflow-hidden" open>
+            <summary class="flex items-center justify-between px-6 py-4 hover:bg-slate-800/30 transition-colors">
+              <div class="flex items-center gap-3">
+                <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+                <span class="font-semibold text-white text-sm">ADR-1: Build on OpenClaw vs. From Scratch</span>
+              </div>
+              <span class="tag tag-recommended">Recommended: OpenClaw</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2">
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                  <thead>
+                    <tr class="text-left text-slate-400">
+                      <th class="px-3 py-2 w-24"></th>
+                      <th class="px-3 py-2">Build on OpenClaw</th>
+                      <th class="px-3 py-2">From Scratch</th>
+                    </tr>
+                  </thead>
+                  <tbody class="text-slate-400">
+                    <tr>
+                      <td class="px-3 py-2 text-emerald-400 font-medium">Pros</td>
+                      <td class="px-3 py-2">Slack, spawning, cron, skills, sandboxing — all done. Active OSS community.</td>
+                      <td class="px-3 py-2">Full control. No inherited complexity. Clean abstractions.</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2 text-red-400 font-medium">Cons</td>
+                      <td class="px-3 py-2">Tied to session model. File-based memory. Single-process.</td>
+                      <td class="px-3 py-2">6+ months to rebuild existing primitives.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="text-xs text-slate-500 mt-3 pl-3 border-l-2 border-indigo-500/30">The primitives are there. We extend, not rebuild.</p>
+            </div>
+          </details>
+
+          <!-- Decision 2 -->
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center justify-between px-6 py-4 hover:bg-slate-800/30 transition-colors">
+              <div class="flex items-center gap-3">
+                <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+                <span class="font-semibold text-white text-sm">ADR-2: Orchestrator as Skill vs. Plugin vs. Fork</span>
+              </div>
+              <span class="tag tag-recommended">Recommended: Hybrid</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2">
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                  <thead>
+                    <tr class="text-left text-slate-400">
+                      <th class="px-3 py-2 w-24"></th>
+                      <th class="px-3 py-2">Skill</th>
+                      <th class="px-3 py-2">Plugin</th>
+                      <th class="px-3 py-2">Fork</th>
+                    </tr>
+                  </thead>
+                  <tbody class="text-slate-400">
+                    <tr>
+                      <td class="px-3 py-2 text-emerald-400 font-medium">Pros</td>
+                      <td class="px-3 py-2">Simplest. Uses existing tools. Easy to distribute.</td>
+                      <td class="px-3 py-2">Access to Gateway internals. Can add new tools.</td>
+                      <td class="px-3 py-2">Full control.</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2 text-red-400 font-medium">Cons</td>
+                      <td class="px-3 py-2">Limited to existing tools. No Gateway events.</td>
+                      <td class="px-3 py-2">Coupled to internals.</td>
+                      <td class="px-3 py-2">Maintenance burden. Diverges from upstream.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="text-xs text-slate-500 mt-3 pl-3 border-l-2 border-indigo-500/30"><strong>Skill</strong> teaches the agent how to orchestrate. <strong>Plugin</strong> exposes new tools (task.create, task.list, integration.query). Best of both.</p>
+            </div>
+          </details>
+
+          <!-- Decision 3 -->
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center justify-between px-6 py-4 hover:bg-slate-800/30 transition-colors">
+              <div class="flex items-center gap-3">
+                <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+                <span class="font-semibold text-white text-sm">ADR-3: Task Store Backend</span>
+              </div>
+              <span class="tag tag-recommended">Recommended: SQLite</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2">
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                  <thead>
+                    <tr class="text-left text-slate-400">
+                      <th class="px-3 py-2 w-24"></th>
+                      <th class="px-3 py-2">SQLite</th>
+                      <th class="px-3 py-2">JSON Files</th>
+                      <th class="px-3 py-2">Postgres</th>
+                    </tr>
+                  </thead>
+                  <tbody class="text-slate-400">
+                    <tr>
+                      <td class="px-3 py-2 text-emerald-400 font-medium">Pros</td>
+                      <td class="px-3 py-2">Queryable, relational, single-file, zero-ops</td>
+                      <td class="px-3 py-2">Simple, fits file-based pattern</td>
+                      <td class="px-3 py-2">Full RDBMS, scales</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2 text-red-400 font-medium">Cons</td>
+                      <td class="px-3 py-2">Needs driver</td>
+                      <td class="px-3 py-2">Not queryable, no indexes</td>
+                      <td class="px-3 py-2">Running server, over-engineered for v1</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="text-xs text-slate-500 mt-3 pl-3 border-l-2 border-indigo-500/30">Queryable, zero-ops, single file. Migrate to Postgres if/when multi-instance is needed.</p>
+            </div>
+          </details>
+
+          <!-- Decision 4 -->
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center justify-between px-6 py-4 hover:bg-slate-800/30 transition-colors">
+              <div class="flex items-center gap-3">
+                <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+                <span class="font-semibold text-white text-sm">ADR-4: Work Discovery — Pull vs. Push vs. Hybrid</span>
+              </div>
+              <span class="tag tag-recommended">Recommended: Hybrid</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2">
+              <p class="text-xs text-slate-400 mb-3">Cron-based discovery runs every 15–30 min for proactive scanning. Webhooks for real-time events from Linear, GitHub, etc. Slack messages hit the agent directly via OpenClaw's channel integration.</p>
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                  <thead>
+                    <tr class="text-left text-slate-400">
+                      <th class="px-3 py-2 w-24"></th>
+                      <th class="px-3 py-2">Pull (cron)</th>
+                      <th class="px-3 py-2">Push (webhooks)</th>
+                      <th class="px-3 py-2">Hybrid</th>
+                    </tr>
+                  </thead>
+                  <tbody class="text-slate-400">
+                    <tr>
+                      <td class="px-3 py-2 text-emerald-400 font-medium">Pros</td>
+                      <td class="px-3 py-2">Simple, predictable, easy to debug</td>
+                      <td class="px-3 py-2">Real-time, low latency</td>
+                      <td class="px-3 py-2">Best of both</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2 text-red-400 font-medium">Cons</td>
+                      <td class="px-3 py-2">Latency up to cron interval</td>
+                      <td class="px-3 py-2">Complex, reliability concerns</td>
+                      <td class="px-3 py-2">More moving parts</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+
+          <!-- Decision 5 -->
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center justify-between px-6 py-4 hover:bg-slate-800/30 transition-colors">
+              <div class="flex items-center gap-3">
+                <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+                <span class="font-semibold text-white text-sm">ADR-5: Question Surfacing</span>
+              </div>
+              <span class="tag tag-recommended">Recommended: Thread + DM Escalation</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2">
+              <p class="text-xs text-slate-400">Thread reply by default (context is colocated, others can help). Escalation to DM if no response within configurable timeout. Optional <code class="text-indigo-400">#agent-questions</code> channel as overflow/dashboard.</p>
+            </div>
+          </details>
+
+          <!-- Decision 6 -->
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center justify-between px-6 py-4 hover:bg-slate-800/30 transition-colors">
+              <div class="flex items-center gap-3">
+                <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+                <span class="font-semibold text-white text-sm">ADR-6: Agent Autonomy Level</span>
+              </div>
+              <span class="tag tag-recommended">Default: Propose + Approve</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2">
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <h5 class="text-xs font-semibold text-emerald-400 mb-1">Full Auto</h5>
+                  <p class="text-xs text-slate-500">Low-risk, well-understood tasks. Reports, research, status updates.</p>
+                </div>
+                <div class="bg-indigo-500/10 rounded-lg p-3 border border-indigo-500/20">
+                  <h5 class="text-xs font-semibold text-indigo-400 mb-1">Propose + Approve ★</h5>
+                  <p class="text-xs text-slate-500">Medium-risk. Agent proposes, human approves via ✅ reaction or reply.</p>
+                </div>
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <h5 class="text-xs font-semibold text-amber-400 mb-1">Human-Initiated</h5>
+                  <p class="text-xs text-slate-500">High-risk or new task types. Only acts on explicit @mentions.</p>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <!-- Integrations -->
+      <section id="integrations" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-mono">05</span>
+          Integrations
+        </h2>
+
+        <div class="card rounded-xl p-6">
+          <h4 class="text-sm font-semibold text-white mb-4">v1 Target Integrations</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left text-slate-400">
+                  <th class="px-3 py-2">Integration</th>
+                  <th class="px-3 py-2">Method</th>
+                  <th class="px-3 py-2">Provides</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-3 py-2 font-medium text-white">Slack</td><td class="px-3 py-2"><span class="text-emerald-400">Native (Bolt)</span></td><td class="px-3 py-2">Messages, threads, reactions, files, user info</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Linear</td><td class="px-3 py-2"><span class="text-indigo-400">Skill</span></td><td class="px-3 py-2">Issues, projects, cycles, comments</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">GitHub</td><td class="px-3 py-2"><span class="text-indigo-400">Skill</span></td><td class="px-3 py-2">PRs, issues, CI runs, code search</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Google Workspace</td><td class="px-3 py-2"><span class="text-indigo-400">Skill</span></td><td class="px-3 py-2">Gmail, Calendar, Drive, Docs</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Web</td><td class="px-3 py-2"><span class="text-slate-400">Built-in</span></td><td class="px-3 py-2">Search, fetch, browser automation</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-4 pt-4 border-t border-slate-700/50">
+            <h4 class="text-sm font-semibold text-white mb-2">Connector Interface</h4>
+            <div class="arch-diagram rounded-lg p-3 text-xs">
+              <pre class="text-slate-400"><span class="text-indigo-400">&lt;integration&gt;</span>.query(filter)        <span class="text-slate-600">// pull data</span>
+<span class="text-indigo-400">&lt;integration&gt;</span>.act(action, params)   <span class="text-slate-600">// perform action</span>
+<span class="text-indigo-400">&lt;integration&gt;</span>.subscribe(event, url)  <span class="text-slate-600">// register for push</span></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Implementation -->
+      <section id="implementation" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-mono">06</span>
+          Implementation Plan
+        </h2>
+
+        <div class="space-y-6 phase-line">
+          <!-- Phase 1 -->
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold z-10">1</div>
+            <div class="card rounded-xl p-5 flex-1">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-semibold text-white text-sm">Foundation</h4>
+                <span class="text-xs text-slate-500">Weeks 1–2</span>
+              </div>
+              <ul class="space-y-1.5 text-xs text-slate-400">
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Choose product name</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Set up repo (monorepo: plugin + skills)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Build Task Store (SQLite + TypeScript types)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Build orchestrator skill (SKILL.md)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Basic task dispatch → sessions_spawn → Slack</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Question detection + routing</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Phase 2 -->
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center text-white text-xs font-bold z-10">2</div>
+            <div class="card rounded-xl p-5 flex-1">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-semibold text-white text-sm">Work Discovery</h4>
+                <span class="text-xs text-slate-500">Weeks 3–4</span>
+              </div>
+              <ul class="space-y-1.5 text-xs text-slate-400">
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Slack context scanner (cron: extract action items, unresolved questions)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Integration scanner (Linear, GitHub, Calendar)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Task proposal flow (propose → ✅ reaction → approve)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Priority ranking algorithm</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Phase 3 -->
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold z-10">3</div>
+            <div class="card rounded-xl p-5 flex-1">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-semibold text-white text-sm">Proactive Agents</h4>
+                <span class="text-xs text-slate-500">Weeks 5–6</span>
+              </div>
+              <ul class="space-y-1.5 text-xs text-slate-400">
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Recurring task templates (standup digest, weekly report, dep check)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Agent self-improvement: track outcomes, learn approval patterns</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Multi-step task chains (research → draft → review → publish)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Artifact management (files, PRs, deploys per task)</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Phase 4 -->
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white text-xs font-bold z-10">4</div>
+            <div class="card rounded-xl p-5 flex-1">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-semibold text-white text-sm">Polish + Scale</h4>
+                <span class="text-xs text-slate-500">Weeks 7–8</span>
+              </div>
+              <ul class="space-y-1.5 text-xs text-slate-400">
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Dashboard skill (/tasks, /agents, /queue)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Approval workflow refinement (timeouts, escalation)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Rate limiting + cost controls (per-agent token budgets)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Documentation, README, demo video</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Open source release</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Risks -->
+      <section id="risks" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-mono">07</span>
+          Risk Matrix
+        </h2>
+
+        <div class="space-y-3">
+          <div class="card rounded-xl p-5 risk-critical">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-white">Context Pollution</h4>
+              <div class="flex gap-2">
+                <span class="text-xs text-red-400">High likelihood</span>
+                <span class="text-xs text-slate-600">·</span>
+                <span class="text-xs text-red-400">High impact</span>
+              </div>
+            </div>
+            <p class="text-xs text-slate-400 mb-2">Orchestrator's context window fills with task metadata, degrading performance.</p>
+            <p class="text-xs text-slate-500"><strong class="text-slate-400">Mitigation:</strong> Isolated sessions. Task Store is out-of-band (SQLite). Orchestrator reads on demand.</p>
+          </div>
+
+          <div class="card rounded-xl p-5 risk-high">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-white">Runaway Costs</h4>
+              <div class="flex gap-2">
+                <span class="text-xs text-orange-400">Med likelihood</span>
+                <span class="text-xs text-slate-600">·</span>
+                <span class="text-xs text-red-400">High impact</span>
+              </div>
+            </div>
+            <p class="text-xs text-slate-400 mb-2">Proactive agents spawn too many sub-agents, burning tokens.</p>
+            <p class="text-xs text-slate-500"><strong class="text-slate-400">Mitigation:</strong> Token budgets per task. Max concurrent sub-agents. Approval gates for expensive ops.</p>
+          </div>
+
+          <div class="card rounded-xl p-5 risk-medium">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-white">Question Loops</h4>
+              <div class="flex gap-2">
+                <span class="text-xs text-yellow-400">Med likelihood</span>
+                <span class="text-xs text-slate-600">·</span>
+                <span class="text-xs text-yellow-400">Med impact</span>
+              </div>
+            </div>
+            <p class="text-xs text-slate-400 mb-2">Agent asks, human answers, agent misinterprets, asks again.</p>
+            <p class="text-xs text-slate-500"><strong class="text-slate-400">Mitigation:</strong> Structured question format. Max rounds per task. Escalate to human takeover after N rounds.</p>
+          </div>
+
+          <div class="card rounded-xl p-5 risk-medium">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-white">Slack API Rate Limits</h4>
+              <div class="flex gap-2">
+                <span class="text-xs text-yellow-400">Med likelihood</span>
+                <span class="text-xs text-slate-600">·</span>
+                <span class="text-xs text-yellow-400">Med impact</span>
+              </div>
+            </div>
+            <p class="text-xs text-slate-400 mb-2">Too many reads/writes hit Slack's tier limits.</p>
+            <p class="text-xs text-slate-500"><strong class="text-slate-400">Mitigation:</strong> Batch reads. Cache channel history. Respect tier limits. Use OpenClaw's built-in chunking.</p>
+          </div>
+
+          <div class="card rounded-xl p-5 risk-low">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-white">Stale Context</h4>
+              <div class="flex gap-2">
+                <span class="text-xs text-green-400">Low likelihood</span>
+                <span class="text-xs text-slate-600">·</span>
+                <span class="text-xs text-yellow-400">Med impact</span>
+              </div>
+            </div>
+            <p class="text-xs text-slate-400 mb-2">Work discovery acts on outdated Slack messages.</p>
+            <p class="text-xs text-slate-500"><strong class="text-slate-400">Mitigation:</strong> Timestamp filtering. Dedup against Task Store. Check if work is already in progress.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Naming -->
+      <section id="naming" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-mono">08</span>
+          Product Name Candidates
+        </h2>
+
+        <div class="card rounded-xl p-6">
+          <p class="text-sm text-slate-400 mb-4">Should convey: autonomous, proactive, Slack-native, orchestration.</p>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div class="bg-slate-800/40 rounded-lg p-3 text-center hover:bg-indigo-500/10 hover:border-indigo-500/30 border border-transparent transition-all cursor-pointer">
+              <span class="text-white font-semibold text-sm">Relay</span>
+              <p class="text-xs text-slate-500 mt-1">Passing work between agents & humans</p>
+            </div>
+            <div class="bg-slate-800/40 rounded-lg p-3 text-center hover:bg-indigo-500/10 hover:border-indigo-500/30 border border-transparent transition-all cursor-pointer">
+              <span class="text-white font-semibold text-sm">Dispatch</span>
+              <p class="text-xs text-slate-500 mt-1">Task routing & assignment</p>
+            </div>
+            <div class="bg-slate-800/40 rounded-lg p-3 text-center hover:bg-indigo-500/10 hover:border-indigo-500/30 border border-transparent transition-all cursor-pointer">
+              <span class="text-white font-semibold text-sm">Foreman</span>
+              <p class="text-xs text-slate-500 mt-1">Oversees the crew</p>
+            </div>
+            <div class="bg-slate-800/40 rounded-lg p-3 text-center hover:bg-indigo-500/10 hover:border-indigo-500/30 border border-transparent transition-all cursor-pointer">
+              <span class="text-white font-semibold text-sm">Conductor</span>
+              <p class="text-xs text-slate-500 mt-1">Orchestrates the ensemble</p>
+            </div>
+            <div class="bg-slate-800/40 rounded-lg p-3 text-center hover:bg-indigo-500/10 hover:border-indigo-500/30 border border-transparent transition-all cursor-pointer">
+              <span class="text-white font-semibold text-sm">Nerve</span>
+              <p class="text-xs text-slate-500 mt-1">Central nervous system</p>
+            </div>
+            <div class="bg-slate-800/40 rounded-lg p-3 text-center hover:bg-indigo-500/10 hover:border-indigo-500/30 border border-transparent transition-all cursor-pointer">
+              <span class="text-white font-semibold text-sm">Pulse</span>
+              <p class="text-xs text-slate-500 mt-1">Always-on workspace awareness</p>
+            </div>
+            <div class="bg-slate-800/40 rounded-lg p-3 text-center hover:bg-indigo-500/10 hover:border-indigo-500/30 border border-transparent transition-all cursor-pointer">
+              <span class="text-white font-semibold text-sm">Hive</span>
+              <p class="text-xs text-slate-500 mt-1">Collective intelligence</p>
+            </div>
+            <div class="bg-slate-800/40 rounded-lg p-3 text-center hover:bg-indigo-500/10 hover:border-indigo-500/30 border border-transparent transition-all cursor-pointer">
+              <span class="text-white font-semibold text-sm">Triage</span>
+              <p class="text-xs text-slate-500 mt-1">Prioritizes & routes work</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Open Questions -->
+      <section id="open-questions" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-mono">09</span>
+          Open Questions
+        </h2>
+
+        <div class="space-y-3">
+          <div class="card rounded-xl p-5">
+            <div class="flex items-start gap-3">
+              <span class="text-indigo-400 font-mono text-sm font-bold mt-0.5">Q1</span>
+              <div>
+                <h4 class="text-sm font-semibold text-white mb-1">Multi-tenant or single-tenant?</h4>
+                <p class="text-xs text-slate-400">Viktor is multi-tenant SaaS. OpenClaw is single-tenant self-hosted.</p>
+                <p class="text-xs text-slate-500 mt-1"><strong class="text-indigo-400">Rec:</strong> Single-tenant first, multi-tenant later via managed hosting.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card rounded-xl p-5">
+            <div class="flex items-start gap-3">
+              <span class="text-indigo-400 font-mono text-sm font-bold mt-0.5">Q2</span>
+              <div>
+                <h4 class="text-sm font-semibold text-white mb-1">Model selection per agent type?</h4>
+                <p class="text-xs text-slate-400">Cheap models for discovery/triage, expensive for coding/research?</p>
+                <p class="text-xs text-slate-500 mt-1"><strong class="text-indigo-400">Rec:</strong> Yes, configurable per agent type.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card rounded-xl p-5">
+            <div class="flex items-start gap-3">
+              <span class="text-indigo-400 font-mono text-sm font-bold mt-0.5">Q3</span>
+              <div>
+                <h4 class="text-sm font-semibold text-white mb-1">How much Slack history to scan?</h4>
+                <p class="text-xs text-slate-400">Full history is expensive. Last 24h? 100 messages?</p>
+                <p class="text-xs text-slate-500 mt-1"><strong class="text-indigo-400">Rec:</strong> Configurable, default 24h or 200 messages (whichever is less).</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card rounded-xl p-5">
+            <div class="flex items-start gap-3">
+              <span class="text-indigo-400 font-mono text-sm font-bold mt-0.5">Q4</span>
+              <div>
+                <h4 class="text-sm font-semibold text-white mb-1">Own Slack bot identity or share OpenClaw's?</h4>
+                <p class="text-xs text-slate-400">Separate bot app vs. same bot with different persona.</p>
+                <p class="text-xs text-slate-500 mt-1"><strong class="text-indigo-400">Rec:</strong> Same bot, different persona via SOUL.md. Avoids Slack app overhead.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card rounded-xl p-5">
+            <div class="flex items-start gap-3">
+              <span class="text-indigo-400 font-mono text-sm font-bold mt-0.5">Q5</span>
+              <div>
+                <h4 class="text-sm font-semibold text-white mb-1">Artifact storage?</h4>
+                <p class="text-xs text-slate-400">Local filesystem? S3? Slack file uploads?</p>
+                <p class="text-xs text-slate-500 mt-1"><strong class="text-indigo-400">Rec:</strong> Local filesystem + Slack upload for delivery. S3 optional for persistence.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Metrics -->
+      <section id="metrics" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-mono">10</span>
+          Success Metrics
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="card rounded-xl p-5 text-center">
+            <div class="text-2xl font-bold text-indigo-400 mb-1">—%</div>
+            <div class="text-xs text-slate-400">Task completion rate</div>
+            <div class="text-xs text-slate-600 mt-1">% of spawned tasks → completed</div>
+          </div>
+          <div class="card rounded-xl p-5 text-center">
+            <div class="text-2xl font-bold text-emerald-400 mb-1">—min</div>
+            <div class="text-xs text-slate-400">Question resolution time</div>
+            <div class="text-xs text-slate-600 mt-1">Median agent question → human answer</div>
+          </div>
+          <div class="card rounded-xl p-5 text-center">
+            <div class="text-2xl font-bold text-purple-400 mb-1">—%</div>
+            <div class="text-xs text-slate-400">Proactive value</div>
+            <div class="text-xs text-slate-600 mt-1">% tasks discovered vs. human-initiated</div>
+          </div>
+          <div class="card rounded-xl p-5 text-center">
+            <div class="text-2xl font-bold text-amber-400 mb-1">—%</div>
+            <div class="text-xs text-slate-400">Human approval rate</div>
+            <div class="text-xs text-slate-600 mt-1">% proposed tasks approved</div>
+          </div>
+          <div class="card rounded-xl p-5 text-center">
+            <div class="text-2xl font-bold text-rose-400 mb-1">$—</div>
+            <div class="text-xs text-slate-400">Cost per task</div>
+            <div class="text-xs text-slate-600 mt-1">Avg token spend per completed task</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Summary -->
+      <section class="mb-16">
+        <div class="card rounded-xl p-6 glow border-indigo-500/20">
+          <h3 class="text-lg font-bold text-white mb-3">TL;DR</h3>
+          <p class="text-sm text-slate-400">
+            Build a Slack-first agent orchestrator as an <strong class="text-indigo-400">OpenClaw skill + plugin</strong>, powered by:
+            a <strong class="text-white">Task Store</strong> (SQLite) for structured state,
+            a <strong class="text-white">Work Discovery Engine</strong> that scans Slack/Linear/GitHub/web,
+            a <strong class="text-white">Question Router</strong> that surfaces blockers in Slack threads,
+            and configurable <strong class="text-white">autonomy levels</strong> from full-auto to human-initiated.
+          </p>
+          <p class="text-sm text-slate-500 mt-3 italic">Viktor proved the UX. OpenClaw provides the runtime. We build the orchestration layer in between.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Active nav highlighting -->
+  <script>
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.nav-link');
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          navLinks.forEach(link => link.classList.remove('active'));
+          const active = document.querySelector(`.nav-link[href="#${entry.target.id}"]`);
+          if (active) active.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -80% 0px' });
+
+    sections.forEach(section => observer.observe(section));
+  </script>
+
+</body>
+</html>
