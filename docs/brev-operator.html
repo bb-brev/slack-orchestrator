@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brev Operator — AI COO Planning Document</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwindcss.config = {
+      theme: {
+        extend: {
+          colors: { slate: { 850: '#172033', 950: '#0a0f1a' } },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body { background: #0a0f1a; }
+    .gradient-text { background: linear-gradient(135deg, #f97316, #ef4444, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .gradient-text-blue { background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(100, 116, 139, 0.2); backdrop-filter: blur(12px); transition: border-color 0.2s; }
+    .card:hover { border-color: rgba(249, 115, 22, 0.3); }
+    .glow { box-shadow: 0 0 60px rgba(249, 115, 22, 0.06); }
+    .nav-link.active { color: #f97316; border-left-color: #f97316; }
+    details summary::-webkit-details-marker { display: none; }
+    details[open] summary .chevron { transform: rotate(90deg); }
+    .tag { font-size: 0.65rem; padding: 2px 8px; border-radius: 9999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .tag-rec { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .tag-draft { background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
+    .tag-new { background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.3); }
+    .risk-critical { border-left: 3px solid #ef4444; }
+    .risk-high { border-left: 3px solid #f97316; }
+    .risk-medium { border-left: 3px solid #eab308; }
+    .risk-low { border-left: 3px solid #22c55e; }
+    .arch-diagram { background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(100, 116, 139, 0.2); font-family: 'JetBrains Mono', monospace; overflow-x: auto; }
+    .phase-line { position: relative; }
+    .phase-line::before { content: ''; position: absolute; left: 15px; top: 40px; bottom: 0; width: 2px; background: linear-gradient(to bottom, #f97316, transparent); }
+    table { border-collapse: separate; border-spacing: 0; }
+    th { background: rgba(30, 41, 59, 0.8); }
+    td, th { border-bottom: 1px solid rgba(100, 116, 139, 0.15); }
+    .flow-arrow { color: #475569; }
+    .slack-bubble { background: rgba(74, 21, 75, 0.15); border: 1px solid rgba(74, 21, 75, 0.3); border-radius: 0.75rem; }
+    .brev-bubble { background: rgba(249, 115, 22, 0.08); border: 1px solid rgba(249, 115, 22, 0.2); border-radius: 0.75rem; }
+    @media (max-width: 1024px) { .sidebar { display: none; } }
+  </style>
+</head>
+<body class="text-slate-300 font-sans antialiased">
+
+  <!-- Header -->
+  <header class="fixed top-0 w-full z-50 border-b border-slate-800/50 bg-[#0a0f1a]/80 backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+          </svg>
+        </div>
+        <span class="font-bold text-white text-lg">Brev Operator</span>
+        <span class="tag tag-draft ml-2">RFC Draft</span>
+        <span class="tag tag-new ml-1">New Product</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-slate-500">
+        <span>2026-03-18</span>
+        <span>·</span>
+        <span>Kit + Benn</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex">
+    <!-- Sidebar -->
+    <nav class="sidebar fixed left-0 top-16 bottom-0 w-56 border-r border-slate-800/50 bg-[#0a0f1a]/60 backdrop-blur-xl overflow-y-auto py-6 px-4 z-40">
+      <div class="space-y-1 text-sm">
+        <a href="#vision" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Vision</a>
+        <a href="#why-brev" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Why Brev</a>
+        <a href="#architecture" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Architecture</a>
+        <a href="#slack-ux" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Slack UX</a>
+        <a href="#data-layer" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Data Layer</a>
+        <a href="#agent-types" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Agent Types</a>
+        <a href="#decisions" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Decisions</a>
+        <a href="#orchestration" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Orchestration</a>
+        <a href="#implementation" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Implementation</a>
+        <a href="#risks" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Risks</a>
+        <a href="#vs-standalone" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">vs. Standalone</a>
+        <a href="#metrics" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Metrics</a>
+        <a href="#open-questions" class="nav-link block px-3 py-1.5 rounded-md text-slate-400 hover:text-white border-l-2 border-transparent hover:border-orange-500/50 transition-all">Open Questions</a>
+      </div>
+    </nav>
+
+    <!-- Main -->
+    <main class="ml-0 lg:ml-56 flex-1 max-w-4xl mx-auto px-6 pt-28 pb-20">
+
+      <!-- Hero -->
+      <section class="mb-16">
+        <div class="flex items-center gap-2 text-sm text-orange-400 mb-4 font-medium">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          Extension of Brev · Multi-tenant SaaS
+        </div>
+        <h1 class="text-4xl md:text-5xl font-black text-white leading-tight mb-4">
+          The AI COO<br><span class="gradient-text">That Actually Operates</span>
+        </h1>
+        <p class="text-lg text-slate-400 max-w-2xl mb-8">
+          Not another notification bot. Brev Operator orchestrates <em>humans</em> — assigning work, tracking commitments, unblocking teams, and driving execution through Slack. It knows every goal, every metric, every cadence, every person. It's your company's best operator.
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <span class="px-3 py-1 rounded-full bg-orange-500/10 text-orange-400 text-sm border border-orange-500/20">Brev Platform</span>
+          <span class="px-3 py-1 rounded-full bg-purple-500/10 text-purple-400 text-sm border border-purple-500/20">Slack-First</span>
+          <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-sm border border-emerald-500/20">Multi-Tenant</span>
+          <span class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-sm border border-blue-500/20">Full CRUD</span>
+          <span class="px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 text-sm border border-rose-500/20">Human Orchestration</span>
+        </div>
+      </section>
+
+      <!-- Vision -->
+      <section id="vision" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">01</span>
+          Vision
+        </h2>
+        <div class="card rounded-xl p-6 glow">
+          <div class="mb-6">
+            <h3 class="text-white font-semibold mb-2">The Gap</h3>
+            <p class="text-sm text-slate-400">Brev today tracks goals, auto-generates check-ins, digests meetings, and surfaces risks. But <strong class="text-white">tracking isn't operating</strong>. A real COO doesn't just report that a goal is at risk — they reassign work, escalate blockers, negotiate deadlines, and make sure the ball doesn't drop.</p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Brev Today</h4>
+              <ul class="space-y-2 text-sm text-slate-400">
+                <li class="flex gap-2"><span class="text-slate-600">•</span> Tracks goals & KPIs</li>
+                <li class="flex gap-2"><span class="text-slate-600">•</span> Auto-generates check-ins</li>
+                <li class="flex gap-2"><span class="text-slate-600">•</span> Digests meetings → cadences</li>
+                <li class="flex gap-2"><span class="text-slate-600">•</span> Surfaces risks & slippage</li>
+                <li class="flex gap-2"><span class="text-slate-600">•</span> Sends Slack notifications</li>
+              </ul>
+            </div>
+            <div class="brev-bubble p-4">
+              <h4 class="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-3">Brev Operator</h4>
+              <ul class="space-y-2 text-sm text-slate-300">
+                <li class="flex gap-2"><span class="text-orange-500">→</span> <strong>Assigns</strong> work to the right people</li>
+                <li class="flex gap-2"><span class="text-orange-500">→</span> <strong>Follows up</strong> on commitments made in meetings</li>
+                <li class="flex gap-2"><span class="text-orange-500">→</span> <strong>Unblocks</strong> teams by routing decisions to decision-makers</li>
+                <li class="flex gap-2"><span class="text-orange-500">→</span> <strong>Reassigns</strong> work when someone is overloaded or stuck</li>
+                <li class="flex gap-2"><span class="text-orange-500">→</span> <strong>Prepares</strong> agendas, reports, and artifacts autonomously</li>
+                <li class="flex gap-2"><span class="text-orange-500">→</span> <strong>Escalates</strong> when timelines slip — with context, not just pings</li>
+              </ul>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t border-slate-700/50">
+            <p class="text-sm text-orange-400/70 italic">"Don't tell me the goal is at risk. Tell me who needs to do what by when, and make sure they do it."</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Why Brev -->
+      <section id="why-brev" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">02</span>
+          Why This Is a Brev Product
+        </h2>
+        <div class="card rounded-xl p-6">
+          <p class="text-sm text-slate-400 mb-4">A standalone orchestrator (like the one in our <a href="index.html" class="text-indigo-400 hover:text-indigo-300">previous plan</a>) is a generic tool. Brev Operator is different because it has <strong class="text-white">the full context graph</strong>:</p>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-orange-400 font-semibold text-sm mb-2">🎯 Goals & OKRs</h4>
+              <p class="text-xs text-slate-500">Who owns what. What's on track, at risk, behind. Key results with real-time metrics. The Operator knows what matters.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-orange-400 font-semibold text-sm mb-2">📅 Cadences</h4>
+              <p class="text-xs text-slate-500">Meeting transcripts, action items, decisions made. The Operator knows what was promised and by whom.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-orange-400 font-semibold text-sm mb-2">👥 Org Graph</h4>
+              <p class="text-xs text-slate-500">Teams, roles, reporting lines, workload. The Operator knows who's available, who's overloaded, who can decide.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-orange-400 font-semibold text-sm mb-2">📊 KPIs & Metrics</h4>
+              <p class="text-xs text-slate-500">Auto-tracked from integrations. The Operator can see trends and act on them before humans notice.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-orange-400 font-semibold text-sm mb-2">🧠 Company Memory</h4>
+              <p class="text-xs text-slate-500">Past decisions, rationale, context from months of meetings. The Operator doesn't forget why something was decided.</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-orange-400 font-semibold text-sm mb-2">🔗 Integrations</h4>
+              <p class="text-xs text-slate-500">GitHub, Linear, Jira, HubSpot, Google Workspace — the Operator has a full picture of execution state.</p>
+            </div>
+          </div>
+          <div class="mt-4 pt-4 border-t border-slate-700/50">
+            <p class="text-xs text-slate-500">A generic Slack orchestrator would need to build all of this from scratch. Brev already has it. The Operator is the <strong class="text-slate-400">action layer</strong> on top of Brev's <strong class="text-slate-400">intelligence layer</strong>.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Architecture -->
+      <section id="architecture" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">03</span>
+          Architecture
+        </h2>
+        <div class="arch-diagram rounded-xl p-6 mb-6 text-xs leading-relaxed">
+<pre class="text-orange-300">
+┌─────────────────────────────────────────────────────────┐
+│                     <span class="text-purple-400">SLACK</span>                                │
+│  @brev mentions · DMs · Threads · Reactions · Commands  │
+└──────────┬──────────────────────────────────┬───────────┘
+           │ <span class="text-slate-500">two-way portal</span>                  │
+           ▼                                  │
+┌─────────────────────────────────────────────────────────┐
+│                <span class="text-orange-400">BREV OPERATOR SERVICE</span>                    │
+│         <span class="text-slate-500">(multi-tenant, per-org isolation)</span>               │
+│                                                         │
+│  ┌─────────────┐ ┌──────────────┐ ┌──────────────────┐ │
+│  │ <span class="text-rose-400">Orchestrator</span> │ │ <span class="text-blue-400">Agent Pool</span>   │ │ <span class="text-emerald-400">Execution Engine</span> │ │
+│  │ <span class="text-rose-400">Brain</span>        │ │ <span class="text-blue-400">(per-org)</span>    │ │ <span class="text-emerald-400">(task lifecycle)</span> │ │
+│  └──────┬──────┘ └──────┬───────┘ └────────┬─────────┘ │
+│         │               │                   │           │
+│         ▼               ▼                   ▼           │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │              <span class="text-amber-400">BREV API LAYER</span>                      │   │
+│  │  <span class="text-slate-500">Full CRUD: Goals · KPIs · Cadences · Check-ins</span>   │   │
+│  │  <span class="text-slate-500">Users · Teams · Orgs · Artifacts · Integrations</span>  │   │
+│  └──────────────────────┬───────────────────────────┘   │
+└─────────────────────────┼───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│                    <span class="text-amber-400">BREV PLATFORM</span>                       │
+│  Postgres · Prisma · Supabase · RxDB · Integrations    │
+│  Goals · OKRs · KPIs · Cadences · Transcripts · Memory │
+└─────────────────────────────────────────────────────────┘
+</pre>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="card rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-3 h-3 rounded-full bg-rose-500"></div>
+              <h4 class="font-semibold text-white text-sm">Orchestrator Brain</h4>
+            </div>
+            <p class="text-xs text-slate-400">The decision-making core. Evaluates org state, detects what needs attention, decides what action to take and who should do it. Runs on a planning loop — not reactive, proactive.</p>
+          </div>
+          <div class="card rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-3 h-3 rounded-full bg-blue-500"></div>
+              <h4 class="font-semibold text-white text-sm">Agent Pool</h4>
+            </div>
+            <p class="text-xs text-slate-400">Isolated agents per org. Each agent has the org's full context but can't see other orgs. Spawned for specific tasks: drafting reports, researching blockers, preparing agendas.</p>
+          </div>
+          <div class="card rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+              <h4 class="font-semibold text-white text-sm">Execution Engine</h4>
+            </div>
+            <p class="text-xs text-slate-400">Tracks every commitment, follow-up, and deadline. Not a to-do list — a state machine that escalates, reassigns, and closes the loop.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Slack UX -->
+      <section id="slack-ux" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">04</span>
+          Slack as a Two-Way Portal
+        </h2>
+        <div class="card rounded-xl p-6 mb-4">
+          <h3 class="text-white font-semibold mb-4 text-sm">The Operator in Slack isn't a chatbot. It's a portal into the full Brev platform.</h3>
+
+          <div class="space-y-4">
+            <div>
+              <h4 class="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-3">Inbound: Slack → Brev</h4>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <p class="text-xs text-slate-300 font-medium mb-1">Create & Update</p>
+                  <p class="text-xs text-slate-500">"@brev create a goal for Q2: increase NPS to 70" → goal created in Brev, assigned owner, linked to parent objective</p>
+                </div>
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <p class="text-xs text-slate-300 font-medium mb-1">Check-in</p>
+                  <p class="text-xs text-slate-500">"@brev update ARR to $2.4M" → KPI updated, check-in logged, progress recalculated, status changed if threshold crossed</p>
+                </div>
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <p class="text-xs text-slate-300 font-medium mb-1">Assign & Delegate</p>
+                  <p class="text-xs text-slate-500">"@brev assign the NPS goal to Sarah" → ownership transferred, Sarah notified in Slack with context</p>
+                </div>
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <p class="text-xs text-slate-300 font-medium mb-1">Query</p>
+                  <p class="text-xs text-slate-500">"@brev what's at risk this week?" → real-time risk report with owners, blockers, and suggested actions</p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 class="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-3">Outbound: Brev → Slack</h4>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <p class="text-xs text-slate-300 font-medium mb-1">Follow-ups</p>
+                  <p class="text-xs text-slate-500">"Hey @jake, in yesterday's standup you mentioned the API migration would be done by Friday. How's it tracking?" — contextual, not nagging</p>
+                </div>
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <p class="text-xs text-slate-300 font-medium mb-1">Escalations</p>
+                  <p class="text-xs text-slate-500">"@sarah, QA capacity is at 125% and blocking the V2 launch. Three options: (1) push V2 by a week, (2) bring in a contractor, (3) reduce scope. What's your call?"</p>
+                </div>
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <p class="text-xs text-slate-300 font-medium mb-1">Proactive Reports</p>
+                  <p class="text-xs text-slate-500">Weekly digest dropped in #leadership: progress vs plan, risks, wins, team health — auto-generated, no human effort</p>
+                </div>
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <p class="text-xs text-slate-300 font-medium mb-1">Meeting Prep</p>
+                  <p class="text-xs text-slate-500">Before a cadence meeting: agenda in thread, open action items, metrics since last review, suggested discussion topics</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card rounded-xl p-6">
+          <h4 class="text-sm font-semibold text-white mb-3">Key Principle: Not Just Pinging</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-red-500/5 rounded-lg p-4 border border-red-500/10">
+              <h5 class="text-xs font-semibold text-red-400 mb-2">❌ What notification bots do</h5>
+              <p class="text-xs text-slate-500">"Reminder: Your OKR check-in is due"</p>
+              <p class="text-xs text-slate-500 mt-1">"Reminder: Your OKR check-in is overdue"</p>
+              <p class="text-xs text-slate-500 mt-1">"Reminder: Your OKR check-in is really overdue"</p>
+            </div>
+            <div class="brev-bubble p-4">
+              <h5 class="text-xs font-semibold text-orange-400 mb-2">✅ What an AI COO does</h5>
+              <p class="text-xs text-slate-400">"Hey @mike, I drafted your Q2 pipeline check-in based on HubSpot data and last week's forecast call. Pipeline is at $1.2M vs $1.5M target. I noted the Acme deal slipped — want me to flag that to Chris, or are you handling it? Here's the draft — reply 'approve' to submit, or edit inline."</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Data Layer -->
+      <section id="data-layer" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">05</span>
+          Brev API — Full CRUD Surface
+        </h2>
+        <div class="card rounded-xl p-6">
+          <p class="text-sm text-slate-400 mb-4">The Operator needs full read/write access to every Brev entity. This is the tool layer — every action the Operator can take maps to a Brev API call.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left text-slate-400">
+                  <th class="px-3 py-2">Entity</th>
+                  <th class="px-3 py-2">Read</th>
+                  <th class="px-3 py-2">Create</th>
+                  <th class="px-3 py-2">Update</th>
+                  <th class="px-3 py-2">Delete</th>
+                  <th class="px-3 py-2">Operator Use Case</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-3 py-2 font-medium text-white">Goals / OKRs</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-amber-400">⚠</td><td class="px-3 py-2">Create goals from Slack, update status, reassign owners</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Key Results</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-amber-400">⚠</td><td class="px-3 py-2">Track KR progress, auto-update from integrations</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">KPIs / Metrics</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-amber-400">⚠</td><td class="px-3 py-2">Update metric values, create auto-tracked metrics</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Check-ins</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-slate-600">—</td><td class="px-3 py-2">Draft check-ins, submit on behalf (with approval)</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Cadences</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-slate-600">—</td><td class="px-3 py-2">Prepare agendas, extract action items, track follow-ups</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Users</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-slate-600">—</td><td class="px-3 py-2 text-amber-400">⚠</td><td class="px-3 py-2 text-slate-600">—</td><td class="px-3 py-2">Look up users, understand capacity, map Slack IDs</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Teams</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-slate-600">—</td><td class="px-3 py-2">Understand org structure, route work to right teams</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Artifacts</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-amber-400">⚠</td><td class="px-3 py-2">Generate reports, digests, meeting notes</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Integrations</td><td class="px-3 py-2 text-emerald-400">✓</td><td class="px-3 py-2 text-slate-600">—</td><td class="px-3 py-2 text-slate-600">—</td><td class="px-3 py-2 text-slate-600">—</td><td class="px-3 py-2">Pull data from connected tools (HubSpot, Linear, etc.)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-xs text-slate-500 mt-3"><span class="text-amber-400">⚠</span> = requires human approval via Slack before execution. Destructive or high-impact actions are never autonomous.</p>
+        </div>
+      </section>
+
+      <!-- Agent Types -->
+      <section id="agent-types" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">06</span>
+          Operator Agent Types
+        </h2>
+        <div class="card rounded-xl p-6">
+          <p class="text-sm text-slate-400 mb-4">Inspired by OpenClaw's <code class="text-orange-400">sessions_spawn</code> model — each task gets an isolated agent with the right tools, context, and permissions. Multi-tenant: agents can only see their own org's data.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-rose-400 mb-2">🧠 Orchestrator</h4>
+              <p class="text-xs text-slate-500 mb-2">The brain. Runs the planning loop. Evaluates org state, decides what needs attention, dispatches work agents.</p>
+              <p class="text-xs text-slate-600">Model: Opus/Sonnet · Runs: always-on per org</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-blue-400 mb-2">📝 Drafter</h4>
+              <p class="text-xs text-slate-500 mb-2">Writes check-ins, reports, agendas, digests. Pulls data from Brev APIs + integrations, produces artifacts.</p>
+              <p class="text-xs text-slate-600">Model: Sonnet · Runs: on-demand, spawned per task</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-emerald-400 mb-2">🔎 Analyst</h4>
+              <p class="text-xs text-slate-500 mb-2">Deep-dives into data. Finds trends, correlations, blockers. Answers "why is this KPI declining?" with evidence.</p>
+              <p class="text-xs text-slate-600">Model: Sonnet/Opus · Runs: on-demand</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-purple-400 mb-2">📣 Coordinator</h4>
+              <p class="text-xs text-slate-500 mb-2">Handles human interactions in Slack. Follow-ups, approvals, question routing. Knows when to DM vs. thread vs. channel.</p>
+              <p class="text-xs text-slate-600">Model: Haiku/Sonnet · Runs: event-driven</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-amber-400 mb-2">⚡ Executor</h4>
+              <p class="text-xs text-slate-500 mb-2">Takes approved actions. Updates goals, reassigns owners, creates cadence events, modifies KPI targets.</p>
+              <p class="text-xs text-slate-600">Model: Haiku · Runs: on approval, short-lived</p>
+            </div>
+            <div class="bg-slate-800/30 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-cyan-400 mb-2">🔌 Integrator</h4>
+              <p class="text-xs text-slate-500 mb-2">Pulls data from external tools (HubSpot, Linear, Jira, Sheets). Reconciles external state with Brev's model.</p>
+              <p class="text-xs text-slate-600">Model: Haiku · Runs: scheduled + on-demand</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Decisions -->
+      <section id="decisions" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">07</span>
+          Architectural Decisions
+        </h2>
+        <div class="space-y-4">
+
+          <details class="card rounded-xl overflow-hidden" open>
+            <summary class="flex items-center justify-between px-6 py-4 hover:bg-slate-800/30 transition-colors">
+              <div class="flex items-center gap-3">
+                <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+                <span class="font-semibold text-white text-sm">ADR-1: Brev Extension vs. Standalone Product</span>
+              </div>
+              <span class="tag tag-rec">Brev Extension</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2">
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                  <thead><tr class="text-left text-slate-400"><th class="px-3 py-2 w-24"></th><th class="px-3 py-2">Brev Extension</th><th class="px-3 py-2">Standalone</th></tr></thead>
+                  <tbody class="text-slate-400">
+                    <tr><td class="px-3 py-2 text-emerald-400 font-medium">Pros</td><td class="px-3 py-2">Full context graph (goals, cadences, users, memory). Existing auth, billing, multi-tenancy. Upsell path for current customers.</td><td class="px-3 py-2">Decoupled. Can serve non-Brev users. Simpler initial scope.</td></tr>
+                    <tr><td class="px-3 py-2 text-red-400 font-medium">Cons</td><td class="px-3 py-2">Coupled to Brev's data model. Can't serve non-Brev users out of the box.</td><td class="px-3 py-2">No context. Must rebuild goal/OKR/cadence tracking. Commodity orchestrator.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="text-xs text-slate-500 mt-3 pl-3 border-l-2 border-orange-500/30">The Operator's value IS the context. Without Brev's data, it's just another Slack bot. Build it as a first-class Brev feature.</p>
+            </div>
+          </details>
+
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center justify-between px-6 py-4 hover:bg-slate-800/30 transition-colors">
+              <div class="flex items-center gap-3">
+                <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+                <span class="font-semibold text-white text-sm">ADR-2: Multi-Tenant Agent Isolation</span>
+              </div>
+              <span class="tag tag-rec">Per-Org Isolation</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2">
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                  <thead><tr class="text-left text-slate-400"><th class="px-3 py-2 w-24"></th><th class="px-3 py-2">Per-Org Isolation</th><th class="px-3 py-2">Shared Agent Pool</th><th class="px-3 py-2">Self-Hosted (OpenClaw model)</th></tr></thead>
+                  <tbody class="text-slate-400">
+                    <tr><td class="px-3 py-2 text-emerald-400 font-medium">Pros</td><td class="px-3 py-2">Data isolation by design. Per-org context. SOC2 compliant.</td><td class="px-3 py-2">Efficient resource use. Simpler infra.</td><td class="px-3 py-2">Ultimate data sovereignty.</td></tr>
+                    <tr><td class="px-3 py-2 text-red-400 font-medium">Cons</td><td class="px-3 py-2">More compute. Per-org state management.</td><td class="px-3 py-2">Cross-contamination risk. Complex access control.</td><td class="px-3 py-2">Customer ops burden. Can't iterate centrally.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="text-xs text-slate-500 mt-3 pl-3 border-l-2 border-orange-500/30">Each org gets isolated agent sessions. Agent tools are scoped to the org's data via Brev's existing auth/RLS. No org can see another org's goals, people, or conversations.</p>
+            </div>
+          </details>
+
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center justify-between px-6 py-4 hover:bg-slate-800/30 transition-colors">
+              <div class="flex items-center gap-3">
+                <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+                <span class="font-semibold text-white text-sm">ADR-3: Agent Runtime — Build vs. OpenClaw-Inspired</span>
+              </div>
+              <span class="tag tag-rec">Custom, OpenClaw-Inspired</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2">
+              <p class="text-xs text-slate-400 mb-3">OpenClaw is single-tenant, self-hosted, single-process. We need multi-tenant, managed, horizontally scalable. But the <strong class="text-slate-300">concepts are gold</strong>:</p>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <p class="text-xs text-slate-300 font-medium">Adopt from OpenClaw</p>
+                  <ul class="text-xs text-slate-500 mt-1 space-y-1">
+                    <li>• Session isolation model</li>
+                    <li>• Sub-agent spawning pattern</li>
+                    <li>• Skill/tool composition</li>
+                    <li>• Cron-driven planning loops</li>
+                    <li>• Memory architecture</li>
+                    <li>• Question routing pattern</li>
+                  </ul>
+                </div>
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <p class="text-xs text-slate-300 font-medium">Build Custom</p>
+                  <ul class="text-xs text-slate-500 mt-1 space-y-1">
+                    <li>• Multi-tenant orchestration service</li>
+                    <li>• Brev API tool layer</li>
+                    <li>• Org-scoped agent state (Postgres, not SQLite)</li>
+                    <li>• Horizontal scaling (workers, not single process)</li>
+                    <li>• Slack app per-workspace install</li>
+                    <li>• Usage metering & billing</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center justify-between px-6 py-4 hover:bg-slate-800/30 transition-colors">
+              <div class="flex items-center gap-3">
+                <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+                <span class="font-semibold text-white text-sm">ADR-4: Human-in-the-Loop — Approval Model</span>
+              </div>
+              <span class="tag tag-rec">Tiered Autonomy</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2">
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <h5 class="text-xs font-semibold text-emerald-400 mb-1">Autonomous</h5>
+                  <p class="text-xs text-slate-500">Read data, draft artifacts, surface insights, send follow-up reminders.</p>
+                </div>
+                <div class="bg-orange-500/10 rounded-lg p-3 border border-orange-500/20">
+                  <h5 class="text-xs font-semibold text-orange-400 mb-1">Draft + Approve ★</h5>
+                  <p class="text-xs text-slate-500">Draft check-ins, propose reassignments, suggest escalations. Human approves via Slack reaction or reply.</p>
+                </div>
+                <div class="bg-slate-800/30 rounded-lg p-3">
+                  <h5 class="text-xs font-semibold text-red-400 mb-1">Human Only</h5>
+                  <p class="text-xs text-slate-500">Delete goals, change owners across teams, modify org structure, adjust KPI targets.</p>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500 mt-3 pl-3 border-l-2 border-orange-500/30">The Operator should <strong class="text-slate-400">do the work</strong> and ask for approval, not ask humans to do the work. The output of every action is a draft, a recommendation, or a completed task — never a bare reminder.</p>
+            </div>
+          </details>
+
+          <details class="card rounded-xl overflow-hidden">
+            <summary class="flex items-center justify-between px-6 py-4 hover:bg-slate-800/30 transition-colors">
+              <div class="flex items-center gap-3">
+                <span class="chevron text-slate-500 transition-transform text-xs">▶</span>
+                <span class="font-semibold text-white text-sm">ADR-5: Slack Identity — Shared Bot vs. Dedicated Bot</span>
+              </div>
+              <span class="tag tag-rec">Dedicated "Brev" Bot</span>
+            </summary>
+            <div class="px-6 pb-5 pt-2">
+              <p class="text-xs text-slate-400">Single Slack app: <strong class="text-white">Brev</strong>. Installed per-workspace via OAuth. The Operator is Brev in Slack — same brand, same bot, same @mention. Users don't need to know about agents or orchestration. They just talk to Brev.</p>
+              <p class="text-xs text-slate-500 mt-2">The Slack app needs: bot token scopes for messages/reactions/files/users, event subscriptions for mentions/reactions/thread replies, slash commands for quick queries.</p>
+            </div>
+          </details>
+
+        </div>
+      </section>
+
+      <!-- Orchestration Loops -->
+      <section id="orchestration" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">08</span>
+          Orchestration Loops
+        </h2>
+        <div class="space-y-4">
+          <div class="card rounded-xl p-6">
+            <h3 class="text-white font-semibold text-sm mb-4">Loop 1: Proactive Planning (Cron — every 2–4 hours)</h3>
+            <div class="space-y-3 text-xs">
+              <div class="flex items-start gap-3">
+                <span class="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-mono text-xs flex-shrink-0">1</span>
+                <p class="text-slate-400"><strong class="text-slate-300">Scan org state.</strong> Read all goals, KPIs, check-ins, cadences. Identify: goals at risk, overdue check-ins, stale action items, approaching deadlines.</p>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-mono text-xs flex-shrink-0">2</span>
+                <p class="text-slate-400"><strong class="text-slate-300">Prioritize.</strong> Rank by impact (company goal vs. team goal), urgency (days until deadline), and staleness (days since last update).</p>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-mono text-xs flex-shrink-0">3</span>
+                <p class="text-slate-400"><strong class="text-slate-300">Plan actions.</strong> For each item: draft a check-in, compose a follow-up, prepare an escalation, or schedule a deep-dive.</p>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-mono text-xs flex-shrink-0">4</span>
+                <p class="text-slate-400"><strong class="text-slate-300">Execute.</strong> Spawn agents for each action. Drafters produce artifacts. Coordinators deliver to Slack. Track results.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card rounded-xl p-6">
+            <h3 class="text-white font-semibold text-sm mb-4">Loop 2: Reactive Handling (Event-driven)</h3>
+            <div class="space-y-3 text-xs">
+              <div class="flex items-start gap-3">
+                <span class="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-mono text-xs flex-shrink-0">→</span>
+                <p class="text-slate-400"><strong class="text-slate-300">Slack @mention:</strong> Parse intent. Route to CRUD tool, query engine, or spawned agent. Respond in-thread.</p>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-mono text-xs flex-shrink-0">→</span>
+                <p class="text-slate-400"><strong class="text-slate-300">Approval reaction (✅):</strong> Execute the draft action. Update Brev. Confirm in thread.</p>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-mono text-xs flex-shrink-0">→</span>
+                <p class="text-slate-400"><strong class="text-slate-300">Thread reply to Operator:</strong> Context for a pending action. Human provides info, Operator continues.</p>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-mono text-xs flex-shrink-0">→</span>
+                <p class="text-slate-400"><strong class="text-slate-300">Integration webhook:</strong> External state changed (PR merged, deal closed, metric updated). Recalculate, notify if threshold crossed.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card rounded-xl p-6">
+            <h3 class="text-white font-semibold text-sm mb-4">Loop 3: Cadence Lifecycle (Meeting-driven)</h3>
+            <div class="space-y-3 text-xs">
+              <div class="flex items-start gap-3">
+                <span class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-mono text-xs flex-shrink-0">①</span>
+                <p class="text-slate-400"><strong class="text-slate-300">Pre-meeting (1h before):</strong> Drop agenda in Slack. Include: open action items, metrics since last time, goals needing discussion, suggested topics.</p>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-mono text-xs flex-shrink-0">②</span>
+                <p class="text-slate-400"><strong class="text-slate-300">During meeting:</strong> Listen to transcript (existing Brev feature). Extract action items, decisions, commitments in real-time.</p>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-mono text-xs flex-shrink-0">③</span>
+                <p class="text-slate-400"><strong class="text-slate-300">Post-meeting:</strong> Create follow-up tasks in Brev. Assign owners. Set deadlines. Send summary to Slack. Begin tracking.</p>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-mono text-xs flex-shrink-0">④</span>
+                <p class="text-slate-400"><strong class="text-slate-300">Between meetings:</strong> Follow up on commitments. "Hey @jake, in Tuesday's standup you said the API migration would be done by Friday — how's it going?"</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Implementation -->
+      <section id="implementation" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">09</span>
+          Implementation Plan
+        </h2>
+        <div class="space-y-6 phase-line">
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold z-10">1</div>
+            <div class="card rounded-xl p-5 flex-1">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-semibold text-white text-sm">Foundation: API Tools + Slack App</h4>
+                <span class="text-xs text-slate-500">Weeks 1–3</span>
+              </div>
+              <ul class="space-y-1.5 text-xs text-slate-400">
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Build internal Brev API tool layer (read/write for all entities)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Slack app: OAuth install flow, event subscriptions, bot token management</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Slack ↔ Brev user mapping (Slack user ID → Brev user)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Basic @mention handling: intent detection, CRUD routing</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Per-org agent session isolation</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Multi-tenant agent orchestration service (SST + Lambda/ECS)</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center text-white text-xs font-bold z-10">2</div>
+            <div class="card rounded-xl p-5 flex-1">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-semibold text-white text-sm">Proactive Operator: Planning Loop + Follow-ups</h4>
+                <span class="text-xs text-slate-500">Weeks 4–6</span>
+              </div>
+              <ul class="space-y-1.5 text-xs text-slate-400">
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Org state scanner: goals at risk, overdue check-ins, stale action items</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Priority ranking engine</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Draft check-ins from integration data (HubSpot, Linear, etc.)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Contextual follow-ups: reference what was said in meetings, not generic reminders</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Approval workflow: draft → Slack → ✅ reaction → execute</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center text-white text-xs font-bold z-10">3</div>
+            <div class="card rounded-xl p-5 flex-1">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-semibold text-white text-sm">Cadence Intelligence + Meeting Lifecycle</h4>
+                <span class="text-xs text-slate-500">Weeks 7–9</span>
+              </div>
+              <ul class="space-y-1.5 text-xs text-slate-400">
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Pre-meeting agenda generation (auto-posted to Slack)</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Post-meeting action item extraction → Brev tasks with owners/deadlines</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Commitment tracking: cross-reference meeting transcripts with goal progress</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Escalation engine: detect missed commitments → escalate to decision-maker with options</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold z-10">4</div>
+            <div class="card rounded-xl p-5 flex-1">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-semibold text-white text-sm">Human Orchestration + Workload Intelligence</h4>
+                <span class="text-xs text-slate-500">Weeks 10–12</span>
+              </div>
+              <ul class="space-y-1.5 text-xs text-slate-400">
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Workload awareness: understand each person's capacity from goals, tasks, calendar</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Smart reassignment: suggest moving work when someone is overloaded</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Decision routing: when a goal is blocked, identify the decision-maker and present options</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Usage metering, token budgets per org, billing integration</li>
+                <li class="flex items-center gap-2"><span class="w-4 h-4 rounded border border-slate-600 flex-shrink-0"></span> Admin dashboard in Brev: see what the Operator has done, audit trail</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Risks -->
+      <section id="risks" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">10</span>
+          Risk Matrix
+        </h2>
+        <div class="space-y-3">
+          <div class="card rounded-xl p-5 risk-critical">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-white">Trust Erosion — Operator Nags Instead of Helps</h4>
+              <div class="flex gap-2"><span class="text-xs text-red-400">High likelihood</span><span class="text-xs text-slate-600">·</span><span class="text-xs text-red-400">High impact</span></div>
+            </div>
+            <p class="text-xs text-slate-400 mb-2">If follow-ups feel like spam, users mute the bot. Game over.</p>
+            <p class="text-xs text-slate-500"><strong class="text-slate-400">Mitigation:</strong> Every message must carry value: a drafted artifact, specific context, actionable options. Never a bare "reminder: your check-in is due." Per-user cooldown. Mute controls.</p>
+          </div>
+
+          <div class="card rounded-xl p-5 risk-critical">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-white">Data Integrity — Operator Makes Wrong Updates</h4>
+              <div class="flex gap-2"><span class="text-xs text-orange-400">Med likelihood</span><span class="text-xs text-slate-600">·</span><span class="text-xs text-red-400">High impact</span></div>
+            </div>
+            <p class="text-xs text-slate-400 mb-2">Operator misinterprets a Slack message and updates a KPI incorrectly, or reassigns a goal to the wrong person.</p>
+            <p class="text-xs text-slate-500"><strong class="text-slate-400">Mitigation:</strong> All writes require approval. Undo capability. Audit log with "Operator did X because Y." Confidence thresholds — low-confidence actions always require explicit approval.</p>
+          </div>
+
+          <div class="card rounded-xl p-5 risk-high">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-white">Multi-Tenant Cost — Per-Org Agent Sessions Are Expensive</h4>
+              <div class="flex gap-2"><span class="text-xs text-orange-400">Med likelihood</span><span class="text-xs text-slate-600">·</span><span class="text-xs text-orange-400">High impact</span></div>
+            </div>
+            <p class="text-xs text-slate-400 mb-2">Running planning loops every 2 hours for every org, plus on-demand agents, burns tokens fast.</p>
+            <p class="text-xs text-slate-500"><strong class="text-slate-400">Mitigation:</strong> Cheap models (Haiku) for scanning/triage. Expensive models only for drafting/analysis. Per-org token budgets. Tiered pricing (more active Operator = higher tier).</p>
+          </div>
+
+          <div class="card rounded-xl p-5 risk-medium">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-white">Scope Creep — "Can the Operator Also..."</h4>
+              <div class="flex gap-2"><span class="text-xs text-yellow-400">High likelihood</span><span class="text-xs text-slate-600">·</span><span class="text-xs text-yellow-400">Med impact</span></div>
+            </div>
+            <p class="text-xs text-slate-400 mb-2">Every customer will want the Operator to do something different. HR tasks, IT tickets, expense reports.</p>
+            <p class="text-xs text-slate-500"><strong class="text-slate-400">Mitigation:</strong> Hard scope boundary: the Operator operates within Brev's domain (goals, cadences, execution). External integrations are data sources, not action targets. Phase 1 = Brev CRUD only.</p>
+          </div>
+
+          <div class="card rounded-xl p-5 risk-low">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold text-white">Slack API Limits</h4>
+              <div class="flex gap-2"><span class="text-xs text-green-400">Low likelihood</span><span class="text-xs text-slate-600">·</span><span class="text-xs text-yellow-400">Med impact</span></div>
+            </div>
+            <p class="text-xs text-slate-400 mb-2">High-activity orgs might hit Slack rate limits with frequent messages and reactions.</p>
+            <p class="text-xs text-slate-500"><strong class="text-slate-400">Mitigation:</strong> Message batching. Thread consolidation. Rate-aware queue. Daily message budget per org.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- vs Standalone -->
+      <section id="vs-standalone" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">11</span>
+          vs. Standalone Orchestrator
+        </h2>
+        <div class="card rounded-xl p-6">
+          <p class="text-sm text-slate-400 mb-4">How this differs from the <a href="index.html" class="text-indigo-400 hover:text-indigo-300">standalone orchestrator plan</a>:</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead><tr class="text-left text-slate-400"><th class="px-3 py-2">Dimension</th><th class="px-3 py-2">Standalone Orchestrator</th><th class="px-3 py-2">Brev Operator</th></tr></thead>
+              <tbody class="text-slate-400">
+                <tr><td class="px-3 py-2 font-medium text-white">Context</td><td class="px-3 py-2">Must discover context from Slack/tools</td><td class="px-3 py-2 text-orange-400">Has full org context from day 1</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Orchestrates</td><td class="px-3 py-2">AI agents doing tasks</td><td class="px-3 py-2 text-orange-400">Humans doing work, AI doing ops</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Hosting</td><td class="px-3 py-2">Self-hosted (OpenClaw)</td><td class="px-3 py-2 text-orange-400">Multi-tenant SaaS</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Data</td><td class="px-3 py-2">SQLite, file-based memory</td><td class="px-3 py-2 text-orange-400">Postgres, Brev's full data model</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Users</td><td class="px-3 py-2">Single technical user</td><td class="px-3 py-2 text-orange-400">Entire org, non-technical</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Actions</td><td class="px-3 py-2">Generic (code, research, write)</td><td class="px-3 py-2 text-orange-400">Domain-specific (goals, cadences, check-ins)</td></tr>
+                <tr><td class="px-3 py-2 font-medium text-white">Moat</td><td class="px-3 py-2">None — commodity orchestrator</td><td class="px-3 py-2 text-orange-400">Deep context graph = defensible value</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Metrics -->
+      <section id="metrics" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">12</span>
+          Success Metrics
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="card rounded-xl p-5 text-center">
+            <div class="text-2xl font-bold text-orange-400 mb-1">—%</div>
+            <div class="text-xs text-slate-400">Check-in completion rate</div>
+            <div class="text-xs text-slate-600 mt-1">% of check-ins submitted (draft → approved)</div>
+          </div>
+          <div class="card rounded-xl p-5 text-center">
+            <div class="text-2xl font-bold text-emerald-400 mb-1">—h</div>
+            <div class="text-xs text-slate-400">Follow-up resolution time</div>
+            <div class="text-xs text-slate-600 mt-1">Commitment made → verified complete</div>
+          </div>
+          <div class="card rounded-xl p-5 text-center">
+            <div class="text-2xl font-bold text-purple-400 mb-1">—%</div>
+            <div class="text-xs text-slate-400">Goal health improvement</div>
+            <div class="text-xs text-slate-600 mt-1">% goals moving from At Risk → On Track</div>
+          </div>
+          <div class="card rounded-xl p-5 text-center">
+            <div class="text-2xl font-bold text-blue-400 mb-1">—x</div>
+            <div class="text-xs text-slate-400">Ops hours saved</div>
+            <div class="text-xs text-slate-600 mt-1">Chief of staff / ops manager time reclaimed</div>
+          </div>
+          <div class="card rounded-xl p-5 text-center">
+            <div class="text-2xl font-bold text-rose-400 mb-1">—%</div>
+            <div class="text-xs text-slate-400">Operator adoption</div>
+            <div class="text-xs text-slate-600 mt-1">% of org members interacting with @brev weekly</div>
+          </div>
+          <div class="card rounded-xl p-5 text-center">
+            <div class="text-2xl font-bold text-amber-400 mb-1">< —%</div>
+            <div class="text-xs text-slate-400">Mute rate</div>
+            <div class="text-xs text-slate-600 mt-1">% of users who mute the Operator (trust signal)</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Open Questions -->
+      <section id="open-questions" class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <span class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 text-sm font-mono">13</span>
+          Open Questions
+        </h2>
+        <div class="space-y-3">
+          <div class="card rounded-xl p-5"><div class="flex items-start gap-3"><span class="text-orange-400 font-mono text-sm font-bold mt-0.5">Q1</span><div><h4 class="text-sm font-semibold text-white mb-1">Pricing model?</h4><p class="text-xs text-slate-400">Per-seat (like Brev today)? Per-org flat fee? Usage-based (actions/tokens)? Tiered by autonomy level?</p><p class="text-xs text-slate-500 mt-1"><strong class="text-orange-400">Rec:</strong> Add-on to existing Brev seat pricing. "Brev Pro + Operator" tier. Usage caps per tier.</p></div></div></div>
+          <div class="card rounded-xl p-5"><div class="flex items-start gap-3"><span class="text-orange-400 font-mono text-sm font-bold mt-0.5">Q2</span><div><h4 class="text-sm font-semibold text-white mb-1">Should the Operator DM people or only work in channels?</h4><p class="text-xs text-slate-400">DMs are more actionable. Channels are more transparent. Some things (personal check-ins) feel weird in public.</p><p class="text-xs text-slate-500 mt-1"><strong class="text-orange-400">Rec:</strong> Both. DMs for personal follow-ups (check-ins, deadlines). Channels for team-level reports and escalations. Configurable per org.</p></div></div></div>
+          <div class="card rounded-xl p-5"><div class="flex items-start gap-3"><span class="text-orange-400 font-mono text-sm font-bold mt-0.5">Q3</span><div><h4 class="text-sm font-semibold text-white mb-1">How much autonomy on day one?</h4><p class="text-xs text-slate-400">Ship conservative (everything requires approval) and unlock autonomy over time? Or ship with smart defaults?</p><p class="text-xs text-slate-500 mt-1"><strong class="text-orange-400">Rec:</strong> Conservative start. Read is autonomous. All writes require approval. Unlock per-action autonomy as trust builds.</p></div></div></div>
+          <div class="card rounded-xl p-5"><div class="flex items-start gap-3"><span class="text-orange-400 font-mono text-sm font-bold mt-0.5">Q4</span><div><h4 class="text-sm font-semibold text-white mb-1">Operator personality per org?</h4><p class="text-xs text-slate-400">Should each org be able to customize the Operator's tone, aggressiveness, and communication style?</p><p class="text-xs text-slate-500 mt-1"><strong class="text-orange-400">Rec:</strong> v1: one personality. v2: org-level customization (formal vs. casual, aggressive vs. gentle follow-ups).</p></div></div></div>
+          <div class="card rounded-xl p-5"><div class="flex items-start gap-3"><span class="text-orange-400 font-mono text-sm font-bold mt-0.5">Q5</span><div><h4 class="text-sm font-semibold text-white mb-1">Should the Operator surface in the Brev web app too?</h4><p class="text-xs text-slate-400">Slack-first doesn't mean Slack-only. Should there be an Operator activity feed in the Brev dashboard?</p><p class="text-xs text-slate-500 mt-1"><strong class="text-orange-400">Rec:</strong> Yes — audit trail in Brev showing all Operator actions, decisions, and outcomes. Slack is the interaction layer; Brev is the record layer.</p></div></div></div>
+          <div class="card rounded-xl p-5"><div class="flex items-start gap-3"><span class="text-orange-400 font-mono text-sm font-bold mt-0.5">Q6</span><div><h4 class="text-sm font-semibold text-white mb-1">What happens when someone ignores the Operator?</h4><p class="text-xs text-slate-400">If a follow-up gets no response after 24h, 48h, a week — what's the escalation path?</p><p class="text-xs text-slate-500 mt-1"><strong class="text-orange-400">Rec:</strong> Configurable escalation chain: thread reply → DM → manager notification → skip + flag in weekly report. Never more than 3 touches per item.</p></div></div></div>
+        </div>
+      </section>
+
+      <!-- Summary -->
+      <section class="mb-16">
+        <div class="card rounded-xl p-6 glow border-orange-500/20">
+          <h3 class="text-lg font-bold text-white mb-3">TL;DR</h3>
+          <p class="text-sm text-slate-400">
+            Build <strong class="text-orange-400">Brev Operator</strong> — an AI COO extension of Brev that orchestrates <strong class="text-white">humans, not just agents</strong>. It uses Brev's full context graph (goals, cadences, KPIs, org structure, meeting transcripts, company memory) to <strong class="text-white">drive execution through Slack</strong>. Not pinging people — drafting their work, presenting options, tracking commitments, and escalating with full context.
+          </p>
+          <p class="text-sm text-slate-400 mt-3">
+            Multi-tenant SaaS, inspired by OpenClaw's agent architecture (session isolation, sub-agent spawning, cron-driven planning loops) but built as a <strong class="text-white">managed service inside the Brev platform</strong>. Three loops: proactive planning, reactive handling, and cadence lifecycle. Full CRUD over every Brev entity via Slack as a two-way portal.
+          </p>
+          <p class="text-sm text-orange-400/70 mt-4 italic">Brev tracks your goals. Brev Operator makes sure they actually happen.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.nav-link');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          navLinks.forEach(link => link.classList.remove('active'));
+          const active = document.querySelector(`.nav-link[href="#${entry.target.id}"]`);
+          if (active) active.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -80% 0px' });
+    sections.forEach(section => observer.observe(section));
+  </script>
+</body>
+</html>
